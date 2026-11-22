@@ -1,0 +1,743 @@
+================================================================================
+مستندات فنی کامل اتصال و پیاده‌سازی پنل وب «تندیس همکار» (استخراج‌شده از سورس‌کد واقعی)
+================================================================================
+
+هدف:
+اتصال و پیاده‌سازی کامل تمام امکانات اپلیکیشن «تندیس همکار» به‌عنوان یک پنل وب مجزا متصل به سرور مرکزی تندیس، کاملاً هماهنگ با اپلیکیشن مشتری (تندیس)، اپلیکیشن همکار (اندروید) و پنل مدیریت (تندیس مدیر).
+
+================================================================================
+۱. اتصال سرور، آدرس Endpointها و ساختار جداول مشترک
+================================================================================
+
+الف) سرور مرکزی تندیس (Django REST API)
+--------------------------------------------------------------------------------
+- Base URL:
+  http://62.3.42.195:8000/api/v1/
+- احراز هویت و Headerها:
+  هیچ Header احراز هویتی (Authorization / Bearer Token) برای Django ارسال نمی‌شود.
+  تمامی درخواست‌ها با Content-Type: application/json و Accept: application/json هستند.
+- تنظیمات Timeout در اپ:
+  connectTimeout = 6s | readTimeout = 8s | writeTimeout = 8s
+
+لیست کامل Endpointهای Django:
+1.  POST   auth/send-otp/
+    ورودی: {"phone": "hamkar_09123456789"}
+    کاربرد: اطلاع‌رسانی ارسال OTP به بک‌اند
+
+2.  POST   auth/verify-otp/
+    ورودی: Map<String, String>
+    نکته: در Interface تعریف شده اما بررسی کد OTP ۵ رقمی در کلاینت با مهلت ۱۲۰ ثانیه انجام می‌شود.
+
+3.  POST   customers/register/
+    ورودی: AccountSyncDto (JSON)
+    کاربرد: ثبت‌نام متخصص جدید، بروزرسانی وضعیت آنلاین/آفلاین، تغییر شهر، شبا، مهارت و مدارک
+
+4.  GET    customers/{phone}/
+    مسیر: hamkar_09123456789 یا config_commission
+    کاربرد: استعلام مستقیم حساب متخصص یا تنظیمات پشتیبان کمیسیون
+
+5.  GET    customers/
+    خروجی: List<AccountSyncDto>
+    کاربرد: بررسی یکتایی کد ملی میان تمام حساب‌های hamkar_* و استخراج شهر فعال مشتریان (رکوردهای 09...)
+
+6.  GET    requests/?role=specialist
+    خروجی: List<ServiceRequestDto>
+    کاربرد: دریافت کل سفارش‌های مشتریان + رکوردهای سیستمی جدول requests
+
+7.  POST   requests/
+    ورودی: ServiceRequestDto
+    کاربرد: ثبت بکاپ مسیر C مدارک (docs_hamkar_*)، ثبت تیکت پشتیبانی جایگزین (tkt_req_*) یا سفارش آزمایشی
+
+8.  PATCH  requests/{id}/accept/
+    ورودی: AcceptRequestPayload یا Map<String, Any?>
+    کاربرد: پذیرش سفارش توسط متخصص
+
+9.  PATCH  requests/{id}/status/
+    ورودی: StatusUpdatePayload یا Map<String, Any?>
+    کاربرد: تغییر وضعیت سفارش (ACCEPTED / EN_ROUTE / IN_PROGRESS / COMPLETED / CANCELLED / بازگشت به PENDING_NEARBY)
+
+10. PATCH  requests/{id}/
+    ورودی: Map<String, Any?>
+    کاربرد: ثبت قیمت فاکتور، تگ‌های کیفیت/پرداخت، ارسال لوکیشن زنده متخصص، لغو سفارش، Fallback پذیرش و تغییر وضعیت
+
+11. PUT    requests/{id}/
+    ورودی: ServiceRequestDto
+    کاربرد: Fallback نهایی در صورت خطای PATCH
+
+12. GET    categories/
+    خروجی: List<CategoryDto>
+    کاربرد: لیست دسته‌بندی‌ها و مهارت‌ها (Fallback زمانی که config_categories در reviews خالی باشد)
+
+13. GET    categories/{id}/
+    خروجی: CategoryDto
+    کاربرد: جزئیات یک دسته‌بندی
+
+14. GET    reviews/
+    خروجی: List<SpecialistReviewDto>
+    کاربرد: دریافت نظرات مشتریان + تمام رکوردهای سیستمی (تنظیمات، فاکتورها، کیف پول، قفل نشست، زیبایی، پرداخت)
+
+15. POST   reviews/
+    ورودی: SpecialistReviewDto
+    کاربرد: ایجاد رکورد سیستمی یا همگام‌سازی در جدول reviews
+
+16. PUT    reviews/{id}/
+    ورودی: SpecialistReviewDto
+    کاربرد: بروزرسانی کامل رکورد سیستمی در جدول reviews
+
+17. PATCH  reviews/{id}/
+    ورودی: Map<String, Any?>
+    کاربرد: بروزرسانی جزئی رکورد در جدول reviews
+
+18. GET    reviews/{id}/
+    خروجی: SpecialistReviewDto
+    کاربرد: خواندن مستقیم یک رکورد (config_commission, session_lock_*, spec_profile_*, beauty_slots_*, presence_*, payment_*)
+
+19. DELETE reviews/{id}/
+    کاربرد: حذف mission_{id} هنگام لغو متخصص، حذف cancel_req_{id} پس از تایید لغو مشتری، حذف session_lock_{phone} هنگام خروج
+
+20. POST   support/tickets/
+    ورودی: SupportTicketDto
+    کاربرد: ارسال تیکت پشتیبانی آنلاین به مدیریت
+
+21. GET    support/tickets/?phone={phone}
+    ورودی: phone با فرمت 09...
+    خروجی: List<SupportTicketDto>
+    کاربرد: دریافت تیکت‌های متخصص و پاسخ‌های مدیریت
+
+22. POST   settlements/
+    ورودی: Map<String, Any?>
+    کاربرد: ثبت درخواست تسویه شبا (موازی با ثبت در reviews/)
+
+ب) درگاه پیامک (IranPayamak / FarazSMS)
+--------------------------------------------------------------------------------
+- Base URL:
+  https://api.iranpayamak.com/ws/v1
+- Headers:
+  Api-Key: <IRANPAYAMAK_API_KEY>
+  Accept: application/json
+  Content-Type: application/json
+- خطوط پیش‌فرض: 50002178584000 و 3000505
+- کد پترن OTP: ldnZeX3Eki (متغیر: code)
+- Endpointها:
+  1) POST /sms/pattern
+     {
+       "code": "ldnZeX3Eki",
+       "attributes": { "code": "12345" },
+       "recipient": "+989123456789",
+       "line_number": "3000505",
+       "number_format": "english"
+     }
+  2) POST /sms/simple (Fallback برای OTP + ارسال پیامک پذیرش سفارش به مشتری آفلاین)
+     {
+       "line_number": "50002178584000",
+       "recipients": ["+989123456789"],
+       "message": "متن پیامک",
+       "number_format": "english"
+     }
+  3) GET /patterns | GET /sms/postal/get-available-lines | GET /lines | GET /send_request/{id}/items
+
+ج) نقشه کامل پیشوندها و رکوردهای سیستمی در جداول مشترک
+--------------------------------------------------------------------------------
+۱) جدول /api/v1/customers/:
+- hamkar_{09...}       : حساب متخصص (اطلاعات در 14 بخش pipe-delimited در full_name + چهار فیلد عکس Base64)
+- config_commission    : بکاپ تنظیمات کمیسیون (یا role_title == "SYSTEM_COMMISSION")
+- {09...}              : حساب مشتری عادی (full_name به شکل "نام مشتری | شهر فعال")
+
+۲) جدول /api/v1/requests/:
+- req_{8-char-uuid}    : سفارش عادی مشتری
+- docs_hamkar_{09...}  : (service_category_id = "SPECIALIST_DOCS") بکاپ مسیر C مدارک ۴گانه در customer_review_comment
+- tkt_req_{8-char}     : (service_category_id = "support_ticket") نسخه پشتیبان تیکت پشتیبانی (موضوع در service_title، متن در issue_description، پاسخ مدیر در customer_review_comment)
+* قانون فیلتر: رکوردهایی با id شروع‌شده با docs_hamkar_ یا tkt_req_ یا service_category_id برابر SPECIALIST_DOCS یا support_ticket در لیست سفارش‌ها نادیده گرفته شوند.
+
+۳) جدول /api/v1/reviews/ (همگی باید در بخش «نظرات مشتریان» با تابع isSystemRecord فیلتر شوند):
+- config_categories    | request_id="SYSTEM_CATEGORIES"  | service_title="CONFIG_CATEGORIES"          | comment: آرایه JSON دسته‌بندی و مهارت‌های داینامیک
+- config_commission    | request_id="SYSTEM_COMMISSION"  | service_title="CONFIG_COMMISSION"          | comment: JSON تنظیمات کمیسیون
+- config_sliders / config_* | request_id="SYSTEM_SLIDERS"/"CATEGORY_SLIDERS" | اسلایدرهای سیستمی (نادیده گرفته شود)
+- docs_hamkar_{09...}  | request_id="SPECIALIST_DOCS"    | service_title=<نام مهارت>                 | comment: JSON مدارک ۴گانه (phone, profile_photo, shenasnameh_photo, national_card_photo, skill_license_photo)
+- session_lock_{09...} | request_id="SESSION_LOCK"       | service_title="ACTIVE_DEVICE_SESSION"      | comment: JSON قفل تک‌دستگاهی (phone, device_id, session_token, active, updated_at_epoch)
+- mission_{requestId}  | request_id="{requestId}"        | service_title="MISSION_SYNC"               | comment: آینه وضعیت ماموریت، مشخصات و آواتار متخصص، قیمت و تگ‌ها
+- pricing_{requestId}  | request_id="{requestId}"        | service_title="SPECIALIST_PRICE_ENTRY"     | comment: JSON قیمت و شرح فاکتور صادره توسط متخصص
+- dossier_{requestId}  | request_id="{requestId}"        | service_title="INVOICE_DOSSIER"            | comment: JSON پرونده کامل فاکتور (ردیف‌ها + invoice_photo_base64)
+- payment_{requestId}  | request_id="{requestId}"        | ثبت‌شده توسط اپ مشتری                     | شامل total_amount_toman, price_toman, is_paid_online, payment_status, admin_commission_toman, specialist_share_toman/specialist_net_toman, quality_tags (PAID:TRUE)
+- cancel_req_{reqId}   | request_id="{requestId}"        | service_title="CUSTOMER_CANCEL_REQUEST"    | درخواست لغو مشتری بابت عدم توافق قیمت (پس از تایید متخصص DELETE می‌شود)
+- tx_settlement_{reqId}| request_id="{requestId}"        | service_title="COMMISSION_SETTLEMENT"      | سند غیرقابل تغییر تسویه کمیسیون هر سفارش پرداخت‌شده آنلاین
+- wallet_admin / wallet_admin_panel | request_id="SYSTEM_WALLET_ADMIN" | service_title="WALLET_LEDGER" | دفتر کل کیف پول مدیریت (balance_toman, wallet_balance_toman, total_commission_toman, settled_request_ids)
+- wallet_hamkar_{09...}| request_id="WALLET_{09...}"     | service_title="WALLET_LEDGER"              | دفتر کل کیف پول متخصص (balance_toman, wallet_balance_toman, total_net_earned_toman, settled_request_ids)
+- settlement_{09...}_{epochMs} | request_id="SPECIALIST_SETTLEMENT" | service_title="SPECIALIST_SETTLEMENT" | quality_tags="SETTLEMENT:PENDING_APPROVAL:CASH" | درخواست تسویه شبا
+- presence_{09...}     | وضعیت حضور مشتری در اپ         | ONLINE_IN_APP یا OFFLINE_APP_CLOSED
+- spec_profile_{09...} | برای همکار عادی: service_title="SPECIALIST_PROFILE" (comment = Base64 آواتار)
+                       | برای متخصص زیبایی: service_title="BEAUTY_SPECIALIST_PROFILE" (comment = JSON کامل BeautySpecialistProfileJson)
+- beauty_slots_{09...} | request_id="BEAUTY_SCHEDULE"    | service_title="BEAUTY_SCHEDULE"            | comment: JSON تقویم ۳۰ روزه نوبت‌دهی زیبایی
+- beauty_booking_*     | request_id="BEAUTY_BOOKING"     | service_title="BEAUTY_APPOINTMENT_BOOKING" | comment: JSON نوبت رزرو شده مشتری (BeautyAppointmentDto)
+- tkt_* / ticket_* / support_* | رکوردهای پشتیبانی (در نظرات نادیده گرفته شوند)
+
+
+================================================================================
+۲. ثبت‌نام و احراز هویت متخصص (Signup & KYC)
+================================================================================
+
+الف) مراحل ۵گانه ثبت‌نام (RecruitmentStep):
+1. STEP1_IDENTITY:
+   - phone (نرمال‌شده 09...)
+   - fullName (نام و نام خانوادگی)
+   - nationalCode (کد ملی ۱۰ رقمی + الگوریتم صحت‌سنجی + بررسی آنلاین یکتایی)
+   - birthDate (تاریخ تولد شمسی، پیش‌فرض 1370/01/01)
+2. STEP2_SKILL:
+   - انتخاب مهارت از کاتالوگ داینامیک سرور (یا کاتالوگ پیش‌فرض ۳۴ مهارت در TandisSkillCatalog)
+     -> تعیین categoryCode, categoryGroup (mainGroup), roleTitle (subSpecialty)
+   - businessName (نام مرکز/پروانه کسب، پیش‌فرض: "متخصص سیار تندیس")
+   - skillDescription (توضیحات سابقه و تخصص)
+3. STEP3_DOCUMENTS:
+   - shenasnameh_photo (شناسنامه)
+   - national_card_photo (کارت ملی)
+   - skill_license_photo (پروانه / مدرک مهارت)
+   - profile_photo (سلفی / عکس پرسنلی)
+4. STEP4_LOCATION:
+   - serviceCity (شهر محل فعالیت از استان‌ها و شهرستان‌های ایران)
+   - serviceAddress (آدرس کامل)
+   - serviceLat, serviceLng (مختصات جغرافیایی)
+5. STEP5_CONTRACT_PAYMENT (دارای ۴ زیرصفحه Step5SubPage):
+   - CONTRACT: مطالعه و تایید قرارداد همکاری
+   - DOSSIER_REVIEW: بازبینی پرونده + ورود شماره شبا (IR + ۲۴ رقم معتبر با تشخیص بانک)
+   - PAYMENT_GATEWAY: پرداخت حق عضویت ۴۹۹,۰۰۰ تومان (499000L) و صدور کد پیگیری TND-{suffix}
+   - RECEIPT: نمایش رسید و هدایت به وضعیت انتظار تایید مدیریت
+
+ب) قوانین محدودیت حجم و فشرده‌سازی تصاویر:
+- حداکثر حجم مجاز فایل: 1,048,576 بایت (دقیقاً ۱ مگابایت). در صورت بزرگ‌تر بودن، آپلود مسدود شده و خطای زیر نمایش داده می‌شود:
+  "حجم تصویر نباید بیشتر از ۱ مگابایت باشد"
+- فشرده‌سازی قبل از ارسال: حداکثر طول/عرض 700px، فرمت JPEG کیفیت 65%، انکدینگ Base64 بدون newline، با پیشوند:
+  data:image/jpeg;base64,<BASE64>
+- حاشیه امن خروجی زیر ۹۰۰ کیلوبایت (اعمال روی مدارک ۴گانه، آواتار، عکس فاکتور، نمونه‌کار زیبایی).
+
+ج) قانون یکتایی کد ملی:
+- استعلام کل لیست GET /api/v1/customers/ (رکوردهای hamkar_*):
+  * اگر وضعیت BLOCKED باشد -> مسدود.
+  * اگر متعلق به شماره موبایل دیگر با وضعیت غیر از DELETED/REJECTED باشد -> خطا (کد ملی تکراری).
+  * اگر متعلق به همین شماره با وضعیت APPROVED یا PENDING_ADMIN_APPROVAL باشد -> خطا.
+  * اگر حساب قبلی همین شماره REJECTED یا DELETED باشد -> اجازه ثبت‌نام مجدد دارد.
+
+د) قانون شروع «صفر کیلومتر» واقعی:
+- rating = 0.0
+- completedMissionsCount = 0
+- walletBalanceToman = 0L
+- بدون هیچ سابقه یا تراکنش جعلی.
+
+هـ) الگوی ذخیره‌سازی سه‌مسیره (Triple-Write) و JSONهای دقیق:
+مسیر A: POST /api/v1/customers/register/
+{
+  "phone": "hamkar_09123456789",
+  "full_name": "<بخش0> | <بخش1> | <بخش2> | <بخش3> | <بخش4> | <بخش5> | <بخش6> | <بخش7> | <بخش8> | <بخش9> | <بخش10> | <بخش11> | <بخش12> | <بخش13>",
+  "is_active_session": false,
+  "profile_photo": "data:image/jpeg;base64,...",
+  "shenasnameh_photo": "data:image/jpeg;base64,...",
+  "national_card_photo": "data:image/jpeg;base64,...",
+  "skill_license_photo": "data:image/jpeg;base64,...",
+  "personnel_code": "TND-123456",
+  "role_title": "مکانیک سیار",
+  "category_code": "cat-car-mechanic",
+  "category_group": "خدمات خودرو",
+  "service_city": "تهران",
+  "approval_status": "PENDING_ADMIN_APPROVAL",
+  "shaba_number": "IR000000000000000000000000"
+}
+
+ساختار دقیق ۱۴ بخشی فیلد full_name (جداکننده " | "):
+[0]  نام و نام خانوادگی (fullName)
+[1]  کد ملی (nationalCode)
+[2]  تاریخ تولد (birthDate)
+[3]  عنوان مهارت (roleTitle)
+[4]  کد دسته‌بندی (categoryCode)
+[5]  گروه اصلی (categoryGroup)
+[6]  نام مرکز / پروانه (businessName)
+[7]  شهر خدمت (serviceCity)
+[8]  آدرس خدمت (serviceAddress)
+[9]  مختصات (lat,lng)
+[10] توضیحات مهارت (skillDescription)
+[11] وضعیت + پیگیری + شبا: PENDING_ADMIN_APPROVAL::TRACK-{code}::SHABA-{shaba}
+[12] کد پیگیری (trackingCode)
+[13] کد پرسنلی: PERSONNEL_CODE:TND-{6digits}
+
+وضعیت‌های ممکن حساب (approval_status):
+NOT_FOUND | PENDING_ADMIN_APPROVAL | APPROVED | REJECTED | BLOCKED | DELETED
+(فقط APPROVED مجاز به ورود به میز کار است.)
+
+مسیر B: POST /api/v1/reviews/ (یا PUT /api/v1/reviews/docs_hamkar_{09...}/)
+{
+  "id": "docs_hamkar_09123456789",
+  "request_id": "SPECIALIST_DOCS",
+  "specialist_phone": "09123456789",
+  "specialist_name": "نام متخصص",
+  "customer_name": "SYSTEM_DOCS",
+  "service_title": "عنوان مهارت",
+  "rating": 5,
+  "comment": "{\"phone\":\"09123456789\",\"profile_photo\":\"...\",\"shenasnameh_photo\":\"...\",\"national_card_photo\":\"...\",\"skill_license_photo\":\"...\"}",
+  "quality_tags": "DOCS_UPLOADED"
+}
+
+مسیر C: POST /api/v1/requests/
+{
+  "id": "docs_hamkar_09123456789",
+  "service_category_id": "SPECIALIST_DOCS",
+  "service_title": "مدارک احراز هویت متخصص",
+  "customer_name": "نام متخصص",
+  "customer_phone": "09123456789",
+  "status": "COMPLETED",
+  "customer_review_comment": "{\"phone\":\"09123456789\",\"profile_photo\":\"...\",\"shenasnameh_photo\":\"...\",\"national_card_photo\":\"...\",\"skill_license_photo\":\"...\"}"
+}
+
+بعلاوه ذخیره آواتار در reviews با شناسه spec_profile_{09...}.
+
+
+================================================================================
+۳. ورود، OTP، نشست، قفل تک‌دستگاهی و منع سفارش با شماره مشترک
+================================================================================
+
+الف) نرمال‌سازی شماره موبایل:
+- تبدیل ارقام فارسی/عربی به انگلیسی
+- حذف پیشوند hamkar_
+- تبدیل +989... یا 989... یا 9... (۱۰ رقمی) به فرمت ۱۱ رقمی استاندارد: 09xxxxxxxxx
+
+ب) فرآیند OTP:
+- تولید کد ۵ رقمی تصادفی (10000..99999) با اعتبار ۱۲۰ ثانیه.
+- ارسال پیامک با پترن ldnZeX3Eki (متغیر code) از طریق ایران‌پیامک (Fallback به /sms/simple).
+- فراخوانی همزمان POST /api/v1/auth/send-otp/ با {"phone": "hamkar_09..."}.
+- پس از تایید کد ۵ رقمی -> استعلام GET /api/v1/customers/hamkar_{phone}/:
+  * NOT_FOUND -> نمایش پاپ‌آپ شروع ثبت‌نام
+  * BLOCKED -> نمایش کارت مسدودیت مدیریت
+  * PENDING_ADMIN_APPROVAL -> نمایش کارت انتظار تایید + دکمه استعلام مجدد
+  * APPROVED -> فعال‌سازی قفل تک‌دستگاهی و ورود به میز کار
+
+ج) قفل تک‌دستگاهی (Single-Device Session Lock):
+- هر کلاینت (در وب: localStorage) یک device_unique_id ثابت (UUID) و در هر لاگین یک active_session_token یکتا (sess_{epoch}_{uuid}) تولید می‌کند.
+- هنگام ورود:
+  1) خواندن GET /api/v1/reviews/session_lock_{phone}/
+  2) اگر active == true و device_id != localDeviceId -> ثبت پرچم هشدار displaced_other_device = true برای نمایش پیام در دستگاه جدید.
+  3) بازنویسی قفل با PUT /api/v1/reviews/session_lock_{phone}/ (یا POST /api/v1/reviews/):
+     {
+       "id": "session_lock_09123456789",
+       "request_id": "SESSION_LOCK",
+       "specialist_phone": "09123456789",
+       "specialist_name": "نام متخصص",
+       "customer_name": "SESSION_LOCK",
+       "service_title": "ACTIVE_DEVICE_SESSION",
+       "rating": 5,
+       "comment": "{\"phone\":\"09123456789\",\"device_id\":\"<UUID>\",\"session_token\":\"sess_...\",\"active\":true,\"updated_at_epoch\":1730000000000}",
+       "quality_tags": "DEVICE_LOCK:ACTIVE"
+     }
+- هنگام Polling زنده:
+  خواندن session_lock_{phone}؛ اگر device_id یا session_token با کلاینت فعلی هم‌خوانی نداشت -> بازگشت "SESSION_CONFLICT" -> خروج خودکار (Logout) و نمایش AlertDialog ورود از دستگاه دیگر.
+- هنگام خروج دستی (Logout):
+  DELETE /api/v1/reviews/session_lock_{phone}/ (فقط اگر متعلق به همین دستگاه باشد).
+
+د) کلیدهای ذخیره‌سازی محلی (معادل localStorage در وب):
+- نشست (tandis_hamkar_specialist_session_v3):
+  logged_in_phone, is_logged_in, is_online, device_unique_id, active_session_token, displaced_other_device,
+  cached_full_name, cached_role_title, cached_category_code, cached_category_group,
+  cached_service_city, cached_service_lat, cached_service_lng, cached_shaba, cached_personnel_code, cached_national_code
+- چرخه ماموریت (tandis_mission_lifecycle_v1):
+  rec_{requestId}, dossier_{requestId}, settled_{requestId}, split_settled_{requestId},
+  commission_config_json, beauty_slots_{phone}
+
+هـ) منع قبول سفارش با شماره موبایل مشترک:
+اگر normalizeIranPhone(specialist.phone) == normalizeIranPhone(order.customer_phone) باشد:
+کارت سفارش در رادار مسدود شده و دکمه پذیرش غیرفعال می‌شود با پیام:
+«شماره موبایل متخصص و مشتری یکسان است و امکان پذیرش سفارش خودتان وجود ندارد».
+
+
+================================================================================
+۴. چرخه کامل سفارش و تطبیق (Matching) با سفارش‌های مشتری
+================================================================================
+
+الف) ساختار دقیق JSON سفارش (ServiceRequestDto):
+{
+  "id": "req_a1b2c3d4",
+  "service_category_id": "cat-car-mechanic",
+  "service_title": "مکانیک سیار",
+  "customer_name": "نام مشتری",
+  "customer_phone": "09120000000",
+  "customer_lat": 35.7575,
+  "customer_lng": 51.4100,
+  "home_address": "آدرس کامل",
+  "neighborhood": "نام محله",
+  "city": "تهران",
+  "car_model": "مدل خودرو (در صورت وجود)",
+  "car_plate": "پلاک یا توضیح اضافی",
+  "issue_description": "شرح مشکل مشتری",
+  "status": "PENDING_NEARBY",
+  "price_toman": 450000,
+  "is_urgent": false,
+  "created_at": "2026-01-01T12:00:00Z",
+  "assigned_specialist_id": "09123456789",
+  "assigned_specialist_name": "نام متخصص",
+  "assigned_specialist_phone": "09123456789",
+  "assigned_specialist_plate": "عنوان مهارت متخصص (roleTitle)",
+  "assigned_specialist_rating": 4.8,
+  "specialist_lat": 35.7580,
+  "specialist_lng": 51.4120,
+  "distance_km": 1.2,
+  "eta_minutes": 6,
+  "customer_rating": 5,
+  "customer_review_comment": "نظر مشتری",
+  "customer_quality_tags": "TS_ACCEPT:...|PRICE_TOMAN:...|...",
+  "synced_with_django": true,
+  "is_paid_online": false,
+  "payment_status": "UNPAID",
+  "payment_mode": "ONLINE",
+  "invoice_description": "شرح فاکتور",
+  "parts_description": "شرح اقلام",
+  "cancel_requested_by_customer": false,
+  "customer_cancel_reason": "",
+  "client_documents": "[]"
+}
+
+ب) الگوریتم دقیق فیلتر و تطبیق سفارش‌ها (doesRequestMatchSpecialistSkillAndCity):
+1. حذف رکوردهای سیستمی (docs_hamkar_*, tkt_req_*, SPECIALIST_DOCS, support_ticket).
+2. اگر assigned_specialist_phone یا assigned_specialist_id برابر شماره متخصص بود -> همیشه نمایش داده می‌شود.
+3. قفل تک‌سفارش فعال: در صورت وجود ماموریت فعال (ACCEPTED / EN_ROUTE / IN_PROGRESS)، لیست سفارش‌های جدید رادار خالی شده و امکان پذیرش سفارش جدید قفل است.
+4. تطبیق سخت‌گیرانه شهر (باید دقیقاً برابر specialist.serviceCity باشد):
+   اولویت استخراج شهر سفارش:
+   (1) فیلد city
+   (2) جستجوی نام شهرستان‌های ایران داخل car_plate / neighborhood / home_address / customer_name / issue_description
+   (3) نزدیک‌ترین شهرستان ایران به customer_lat/lng در شعاع حداکثر ۲۵ کیلومتر
+   (4) شهر فعال مشتری از GET /api/v1/customers/ (بخش دوم full_name بعد از "|")
+5. تطبیق مهارت:
+   - service_category_id == specialist.categoryCode
+   - هم‌ارزی حقوقی: legal-petition <-> legal-petition-writer و زیرشاخه‌های cat-legal-judicial
+   - هم‌ارزی زیبایی: cat-beauty-personal / beauty-* / عنوان شامل "نوبت رزرو زیبایی"
+   - کد کانونیکال استخراج‌شده از عنوان سفارش == کد مهارت متخصص
+   - تطابق متنی نرمال‌شده بین service_title و specialist.roleTitle
+   (فیلتر جنسیت یا شعاع فاصله جداگانه وجود ندارد.)
+
+ج) وضعیت‌ها و Aliasها (MissionStep):
+- PENDING_NEARBY : Aliasها -> PENDING, SEARCHING, NEW
+- ACCEPTED       : Aliasها -> ACCEPTED_BY_SPECIALIST, SPECIALIST_ACCEPTED
+- EN_ROUTE       : Aliasها -> SPECIALIST_EN_ROUTE, ON_THE_WAY
+- IN_PROGRESS    : Aliasها -> ARRIVED, STARTED, WORKING, CANCEL_REQUESTED, CANCEL_REQUESTED_BY_CUSTOMER, PENDING_CANCEL, PRICE_DISAGREEMENT, REJECTED_PRICE
+- COMPLETED      : Aliasها -> DONE, FINISHED
+- CANCELLED      : Aliasها -> CANCELED
+
+د) Payloadهای دقیق تغییرات وضعیت:
+۱) پذیرش سفارش (acceptOrderFromRadar):
+   PATCH /api/v1/requests/{id}/accept/ (Fallback: PATCH requests/{id}/ و PUT requests/{id}/)
+   {
+     "specialist_id": "09123456789",
+     "specialist_name": "نام متخصص",
+     "specialist_phone": "09123456789",
+     "specialist_plate": "مکانیک سیار",
+     "specialist_rating": 4.8,
+     "specialist_lat": 35.7575,
+     "specialist_lng": 51.4100,
+     "distance_km": 1.4,
+     "eta_minutes": 7,
+     "status": "ACCEPTED",
+     "assigned_specialist_id": "09123456789",
+     "assigned_specialist_name": "نام متخصص",
+     "assigned_specialist_phone": "09123456789",
+     "assigned_specialist_plate": "مکانیک سیار",
+     "assigned_specialist_rating": 4.8,
+     "customer_quality_tags": "TS_ACCEPT:1730000000000"
+   }
+   + ثبت آینه در PUT/POST /api/v1/reviews/mission_{id}/ (service_title = "MISSION_SYNC")
+   + بررسی GET /api/v1/reviews/presence_{customerPhone}/ -> اگر ONLINE_IN_APP نبود، ارسال پیامک ساده از ایران‌پیامک به مشتری.
+
+۲) شروع کار (IN_PROGRESS) و اتمام کار (COMPLETED):
+   PATCH /api/v1/requests/{id}/status/ (Fallback: PATCH requests/{id}/ و PUT requests/{id}/)
+   {
+     "status": "IN_PROGRESS",
+     "specialist_lat": 35.7575,
+     "specialist_lng": 51.4100,
+     "distance_km": 0.1,
+     "eta_minutes": 1,
+     "customer_quality_tags": "TS_ACCEPT:...|TS_START:...|ARRIVE_MIN:12"
+   }
+   * قفل سخت اتمام کار: تغییر به COMPLETED تا زمانی که isOrderPaidOnline(mission) == true نباشد کاملاً مسدود است (دکمه: "منتظر پرداخت مشتری").
+   * در حالت COMPLETED تگ‌های TS_DONE:{epoch} و WORK_MIN:{min} اضافه و mission_{id} بروزرسانی می‌شود.
+
+۳) لغو سفارش توسط متخصص (cancelActiveMission):
+   بازگشت سفارش به PENDING_NEARBY و خالی کردن فیلدهای متخصص:
+   PATCH /api/v1/requests/{id}/status/ و PATCH /api/v1/requests/{id}/
+   {
+     "status": "PENDING_NEARBY",
+     "assigned_specialist_id": "",
+     "assigned_specialist_name": "",
+     "assigned_specialist_phone": "",
+     "assigned_specialist_plate": "",
+     "specialist_id": "",
+     "specialist_name": "",
+     "specialist_phone": "",
+     "specialist_plate": ""
+   }
+   + DELETE /api/v1/reviews/mission_{id}/
+
+۴) تایید لغو مشتری بابت عدم توافق قیمت (confirmCustomerPriceDisagreementCancellation):
+   PATCH /api/v1/requests/{id}/status/ و PATCH /api/v1/requests/{id}/
+   {
+     "status": "CANCELLED",
+     "cancel_requested_by_customer": false,
+     "customer_quality_tags": "...|CANCEL_CONFIRMED_BY_SPECIALIST:1"
+   }
+   + بروزرسانی mission_{id} با CUSTOMER_CANCEL_CONFIRMED
+   + DELETE /api/v1/reviews/cancel_req_{id}/
+
+
+================================================================================
+۵. صدور فاکتور، محاسبه کمیسیون، کیف پول و تسویه حساب
+================================================================================
+
+الف) دو حالت صدور فاکتور (InvoiceEntryMode) — حداقل مبلغ 1,000 تومان:
+1. ITEMIZED (ردیفی):
+   هر ردیف (InvoiceLineItem):
+   {
+     "row_index": 1,
+     "id": "item_...",
+     "title": "عنوان قطعه یا اجرت",
+     "quantity": 1,
+     "unit_price_toman": 850000,
+     "row_total_toman": 850000,
+     "is_purchased_by_specialist": true
+   }
+2. LUMP_SUM (توافقی / یکجا): مبلغ توافقی + شرح کار (invoice_description).
+* در هر دو حالت، عکس فاکتور (invoice_photo_base64 < 1MB) اختیاری است.
+
+ب) ۴ محل نوشتن همزمان هنگام صدور فاکتور (submitSpecialistFinalPrice):
+1. PATCH /api/v1/requests/{id}/:
+   {
+     "price_toman": 1000000,
+     "invoice_description": "شرح خلاصه",
+     "parts_description": "شرح اقلام",
+     "is_paid_online": false,
+     "customer_quality_tags": "PRICE_TOMAN:1000000|COMM_PCT:15|ADMIN_COMM:150000|SPEC_NET:850000|PAY_STATUS:UNPAID|PAY_MODE:ONLINE|IS_PAID_ONLINE:0|INVOICE_DESC:..."
+   }
+2. PUT/POST /api/v1/reviews/pricing_{id}/ (service_title = "SPECIALIST_PRICE_ENTRY"):
+   JSON: request_id, price_toman, commission_percent, admin_commission_toman, specialist_net_toman,
+         invoice_description, invoice_mode, is_paid_online, payment_status, updated_at_epoch.
+3. PUT/POST /api/v1/reviews/dossier_{id}/ (service_title = "INVOICE_DOSSIER"):
+   {
+     "request_id": "req_...",
+     "tracking_code": "TND-...",
+     "service_title": "مکانیک سیار",
+     "customer_name": "نام مشتری",
+     "customer_phone": "09...",
+     "specialist_name": "نام متخصص",
+     "specialist_phone": "09...",
+     "invoice_mode": "ITEMIZED",
+     "line_items": [ ... ],
+     "total_amount_toman": 1000000,
+     "commission_percent": 15.0,
+     "admin_commission_toman": 150000,
+     "specialist_net_toman": 850000,
+     "description": "شرح فاکتور",
+     "invoice_photo_base64": "data:image/jpeg;base64,...",
+     "issued_at_epoch": 1730000000000,
+     "is_paid_online": false
+   }
+   (اگر ارسال با عکس خطا داد، یک بار بدون invoice_photo_base64 تکرار شود.)
+4. PUT/POST /api/v1/reviews/mission_{id}/ (service_title = "MISSION_SYNC").
+
+ج) نرخ کمیسیون داینامیک (CommissionConfig):
+- منبع اصلی: GET /api/v1/reviews/config_commission/
+- منبع پشتیبان: GET /api/v1/customers/config_commission/
+- JSON داخل comment:
+  {
+    "default_rate_percent": 15.0,
+    "min_rate_percent": 0.0,
+    "max_rate_percent": 50.0,
+    "category_rates": { "cat-car-mechanic": 12.0, "cat-beauty-personal": 10.0 },
+    "updated_at_epoch": 1730000000000,
+    "updated_by": "admin",
+    "note": ""
+  }
+- فرمول:
+  adminCommissionToman = Math.round(grossAmountToman * (ratePercent / 100.0))
+  specialistNetToman   = grossAmountToman - adminCommissionToman
+
+د) تشخیص پرداخت آنلاین و تقسیم خودکار کیف پول (Idempotent):
+- منابع تشخیص پرداخت آنلاین (isOrderPaidOnline):
+  (1) سفارش دارای is_paid_online == true یا payment_status == "PAID"
+  (2) تگ IS_PAID_ONLINE:1 یا PAY_STATUS:PAID در customer_quality_tags
+  (3) رکورد payment_{requestId} در /api/v1/reviews/ با is_paid_online == true یا quality_tags شامل PAID:TRUE
+- به محض پرداخت آنلاین (در Polling و هنگام COMPLETED)، اگر tx_settlement_{requestId} قبلاً ثبت نشده بود:
+  1) ثبت POST/PUT /api/v1/reviews/tx_settlement_{requestId}/ (service_title = "COMMISSION_SETTLEMENT", type = "COMMISSION_SPLIT_SETTLEMENT")
+  2) بروزرسانی کیف پول مدیر: PUT/POST /api/v1/reviews/wallet_admin/ (balance_toman, wallet_balance_toman, total_commission_toman, settled_request_ids حداکثر ۲۰۰ آیتم آخر)
+  3) بروزرسانی کیف پول متخصص: PUT/POST /api/v1/reviews/wallet_hamkar_{phone}/ (balance_toman, wallet_balance_toman, total_net_earned_toman, settled_request_ids)
+* نکته: هیچ سیستم سقف بدهی/اعتبار منفی در اپ وجود ندارد چون پایان کار قفل به پرداخت آنلاین است.
+
+هـ) درخواست تسویه آنی شبا (submitSpecialistSettlementRequest):
+مشروط به balanceToman > 0 و شبای معتبر:
+1. POST /api/v1/reviews/ با id = "settlement_{09...}_{epochMs}", request_id = "SPECIALIST_SETTLEMENT", service_title = "SPECIALIST_SETTLEMENT", quality_tags = "SETTLEMENT:PENDING_APPROVAL:CASH"
+   JSON داخل comment:
+   {
+     "settlement_id": "settlement_0912..._173...",
+     "specialist_phone": "0912...",
+     "specialist_name": "نام متخصص",
+     "shaba_number": "IR...",
+     "amount_toman": 850000,
+     "commission_percent": 15.0,
+     "status": "PENDING_APPROVAL",
+     "payment_method": "CASH",
+     "requested_at_epoch": 1730000000000,
+     "invoice_breakdowns": [
+       { "request_id": "req_...", "service_title": "...", "gross_toman": 1000000, "commission_toman": 150000, "net_toman": 850000 }
+     ]
+   }
+2. ارسال موازی همان JSON به POST /api/v1/settlements/.
+
+
+================================================================================
+۶. وضعیت آنلاین/آفلاین، لوکیشن زنده و همگام‌سازی لحظه‌ای
+================================================================================
+
+- بازه Polling اصلی: هر 2200ms (۲.۲ ثانیه) در حالت لاگین (حتی در حالت آفلاین برای تشخیص لحظه‌ای SESSION_CONFLICT / BLOCKED / DELETED).
+- هر ۱۰ چرخه (~۲۲ ثانیه): بروزرسانی لیست مهارت‌های داینامیک و تیکت‌های پشتیبانی.
+- تغییر وضعیت آنلاین/آفلاین: POST /api/v1/customers/register/ با is_active_session = true/false.
+- ارسال لوکیشن زنده در ماموریت فعال:
+  PATCH /api/v1/requests/{id}/
+  {
+    "specialist_lat": 35.7580,
+    "specialist_lng": 51.4120,
+    "distance_km": 1.2,
+    "eta_minutes": 6,
+    "synced_with_django": true
+  }
+- تغییر شهر و لوکیشن پایه متخصص: ثبت در POST /api/v1/customers/register/ و سینک فوری رادار.
+- آلارم سفارش جدید: مقایسه ID سفارش‌های radarPendingOrders با seenOrderIds -> فعال‌سازی زنگ/لرزش و نمایش اعلان.
+
+
+================================================================================
+۷. ماژول‌های تخصصی داخلی تندیس همکار
+================================================================================
+
+الف) پنل اختصاصی «زیبایی و سلامت» (cat-beauty-personal / beauty-*):
+۱) پروفایل جامع در /api/v1/reviews/spec_profile_{09...}/ (service_title = "BEAUTY_SPECIALIST_PROFILE"):
+   {
+     "specialist_id": "spec_beauty_0912...",
+     "phone": "0912...",
+     "full_name": "نام متخصص",
+     "category_slug": "cat-beauty-personal",
+     "avatar_url": "data:image/jpeg;base64,...",
+     "rating": 4.9,
+     "completed_jobs": 12,
+     "selected_skills": [
+       "کراتین و احیای مو", "کاشت و طراحی ناخن", "اصلاح صورت و ابرو", "کوپ و کوتاهی ژورنالی",
+       "آرایش و شینیون مو", "پاکسازی و فیشیال پوست", "رنگ و مش تخصصی", "اکستنشن مژه و لیفت"
+     ],
+     "portfolio_items": [
+       { "id": "port_...", "title": "...", "skill_title": "...", "image_url": "data:image/jpeg;base64,...", "created_at_epoch": 173... }
+     ],
+     "service_prices": [
+       { "skill_id": "beauty_...", "skill_title": "...", "proposed_price_toman": 1500000, "approved_price_toman": 0, "admin_approved": false, "status": "PENDING_ADMIN_APPROVAL" }
+     ],
+     "open_slots_by_date": {
+       "day_0": ["۱۰:۰۰", "۱۲:۰۰", "۱۶:۰۰", "۱۸:۰۰"],
+       "day_1": ["۱۰:۰۰", "۱۲:۰۰", "۱۶:۰۰", "۱۸:۰۰"],
+       "day_6": []
+     }
+   }
+   (day_0 = شنبه تا day_6 = جمعه؛ تا قبل از تایید قیمت توسط مدیر، مشتری بیعانه ۱۰۰,۰۰۰ تومانی پرداخت می‌کند.)
+
+۲) تقویم ۳۰ روزه نوبت‌دهی در میز کار:
+   /api/v1/reviews/beauty_slots_{09...}/ (request_id = "BEAUTY_SCHEDULE", service_title = "BEAUTY_SCHEDULE")
+   شامل آرایه days برای ۳۰ روز آینده (date_key, jalali_label, weekday_fa, is_open, time_slots) + امکان افزودن ساعت دلخواه.
+
+۳) نوبت‌های رزرو شده مشتریان:
+   رکوردهای beauty_booking_* در /api/v1/reviews/ (service_title = "BEAUTY_APPOINTMENT_BOOKING")
+   کلیدهای BeautyAppointmentDto: id, specialist_phone, customer_name, customer_phone, skill_title, date_label, time_slot, payment_status ("DEPOSIT_100K" یا تسویه کامل), status ("CONFIRMED" یا "CANCELLED_REFUNDED").
+   عملیات: دکمه «لغو و آزادی ساعت نوبت» -> تغییر status به "CANCELLED_REFUNDED".
+
+ب) فروشگاه / استعلام قطعات یدکی:
+- در اپلیکیشن تندیس همکار وجود ندارد (صرفاً در فاکتور ردیفی، فیلد is_purchased_by_specialist روی هر ردیف وجود دارد).
+
+ج) عملکرد رفتاری و نظرات مشتریان:
+- فیلتر GET /api/v1/reviews/ بر اساس specialist_phone و حذف تمام رکوردهای سیستمی (isSystemRecord).
+- محاسبه میانگین زمان حضور (ARRIVE_MIN)، میانگین زمان انجام کار (WORK_MIN)، میانگین ستاره‌ها و رده کیفی (qualityTier) + کد پرسنلی TND-XXXXXX.
+
+د) پشتیبانی آنلاین تندیس مدیر (SupportTicketDto):
+- ارسال: POST /api/v1/support/tickets/ (Fallback: POST /api/v1/requests/ با id="tkt_req_..." و service_category_id="support_ticket").
+- دریافت: GET /api/v1/support/tickets/?phone={09...} + ادغام با tkt_req_* در requests/.
+- JSON:
+  { "id": "tkt_...", "sender_phone": "09...", "sender_name": "...", "sender_role": "SPECIALIST", "subject": "...", "message": "...", "admin_reply": null, "status": "OPEN", "created_at": "..." }
+- موضوعات پیش‌فرض: مدارک و احراز هویت | تسویه حساب و مالی | مشکل در سفارش | سایر
+
+هـ) ویرایش پروفایل، آواتار، شبا و تغییر مهارت:
+- تغییر آواتار: فشرده‌سازی <1MB + ثبت در customers/register/ و reviews/spec_profile_{phone}/.
+- تغییر شبا: اعتبارسنجی IR + ۲۴ رقم + ثبت در customers/register/.
+- تغییر مهارت: انتخاب از کاتالوگ داینامیک (config_categories / categories/) + ثبت در customers/register/. در صورت حذف مهارت فعلی توسط مدیر، دیالوگ اجباری تغییر مهارت باز می‌شود.
+- فیلدهای قفل‌شده (فقط خواندنی): نام، کد ملی، تاریخ تولد، شماره موبایل، کد پرسنلی.
+
+
+================================================================================
+۸. فهرست کامل صفحات، تب‌ها، منوها، دیالوگ‌ها و دکمه‌های عملیاتی
+================================================================================
+
+الف) صفحات پیش از ورود:
+1. SpecialistAuthScreen:
+   - ورودی موبایل + دکمه «ارسال کد تایید»
+   - ورودی کد ۵ رقمی + تایمر ۱۲۰ ثانیه + «تایید و ورود» + «ارسال مجدد کد»
+   - پاپ‌آپ دعوت به ثبت‌نام («شروع ثبت‌نام متخصص»)
+   - کارت انتظار تایید مدیریت («بررسی مجدد وضعیت تایید» + پشتیبانی + خروج)
+   - کارت مسدودیت توسط مدیریت
+2. SpecialistRecruitmentWizard:
+   - گام ۱ (هویت و کد ملی) -> گام ۲ (مهارت و کسب‌وکار) -> گام ۳ (۴ مدرک <1MB) -> گام ۴ (شهر و نقشه) -> گام ۵ (قرارداد -> بازبینی و شبا -> پرداخت ۴۹۹,۰۰۰ تومان -> رسید).
+
+ب) پوسته اصلی (TandisHamkarMainScreen):
+- نوار بالا: دکمه منوی همبرگری + آواتار + عنوان «تندیس همکار» و وضعیت آنلاین/آفلاین + لوگوی تندیس.
+- نوار ناوبری پایین (۵ تب ثابت + ۱ تب شرطی):
+  1. میز کار (RADAR - با Badge تعداد سفارش جدید)
+  2. نظرات (REVIEWS_PROFILE - با Badge تعداد نظرات)
+  3. کارنامه (WALLET)
+  4. پشتیبانی (SUPPORT - با Badge تعداد پاسخ مدیر)
+  5. حساب من (ACCOUNT)
+  6. پنل زیبایی (BEAUTY_DASHBOARD - فقط برای cat-beauty-personal، با Badge تعداد نوبت‌ها)
+- منوی همبرگری:
+  هدر (آواتار، نام، موبایل، مهارت، سوییچ آنلاین/آفلاین) + آیتم‌ها:
+  میز کار و رادار سفارش‌ها | ماموریت فعال و نقشه | درخواست‌های اخیر | امتیازات و نظرات مشتریان | کارنامه و کیف پول | حساب کاربری | پشتیبانی آنلاین تندیس مدیر | خروج از حساب کاربری
+
+ج) صفحات و دکمه‌های اصلی هر بخش:
+1. میز کار و رادار (RadarOrdersTab):
+   - کارت موجودی کیف پول بالا
+   - کارت وضعیت متخصص (سوییچ آنلاین/آفلاین + انتخاب شهر و لوکیشن روی نقشه ایران)
+   - کارت هشدار درخواست لغو مشتری («تایید لغو درخواست»)
+   - کارت ماموریت فعال: نوار پیشرفت ۳ مرحله‌ای (تایید سفارش -> در حال انجام -> اتمام کار) + دو دکمه کنار هم («صدور فاکتور» در راست با رنگ متمایز، «شروع کار» یا «منتظر پرداخت مشتری» / «پایان کار» در چپ) + ردیف ۳ آیکون پایین (تماس، پیامک، آیکون قرمز لغو درخواست)
+   - لیست سفارش‌های در انتظار تایید + دکمه «قبول سفارش» (در صورت تطابق موبایل مشتری و متخصص غیرفعال)
+   - بخش اختصاصی زیبایی: لیست نوبت‌های رزروشده + تقویم کاری ۳۰ روز آینده (سوییچ باز/تعطیل، چیپ ساعت‌ها، ورودی ساعت دلخواه + «افزودن ساعت»، دکمه «ذخیره برنامه ۳۰ روزه در سرور»)
+   - کارت ورود به «درخواست‌های اخیر»
+2. ماموریت فعال و نقشه (ActiveMissionTab):
+   - نقشه زنده مسیر + مدارک پیوستی مشتری (client_documents)
+   - خلاصه فاکتور و کمیسیون + دکمه «صدور فاکتور» / «ویرایش فاکتور»
+   - دکمه‌های مرحله ماموریت + آیکون‌های تماس، پیامک و لغو
+3. صفحه صدور فاکتور (InvoiceIssuanceScreen):
+   - انتخاب حالت ردیفی (ITEMIZED) یا توافقی (LUMP_SUM)
+   - افزودن/حذف ردیف + تیک خرید توسط متخصص + پیش‌نمایش زنده جمع کل، کمیسیون مدیریت و سهم خالص متخصص
+   - انتخاب/عکاسی تصویر فاکتور (<1MB) + دکمه «ثبت و ارسال فاکتور برای مشتری»
+4. درخواست‌های اخیر (RecentRequestsScreen):
+   - جستجو + چیپ فیلتر (همه / تکمیل‌شده / لغوشده) + جزئیات زمان تا ثانیه و کد پیگیری + دکمه «مشاهده پرونده و فاکتور»
+5. نظرات مشتریان (ReviewsProfileTab):
+   - میانگین امتیاز + کارت عملکرد رفتاری + لیست نظرات تاییدشده مشتریان
+6. کارنامه و درآمد (WalletTab):
+   - کارت موجودی کل + نشان نرخ کمیسیون فعال + دکمه «تسویه حساب آنی موجودی به شبا»
+   - کارت عملکرد رفتاری + نمودار خطی ۷ روزه + آمار درآمد امروز و هفته + لیست تراکنش‌ها
+7. پشتیبانی آنلاین (SupportOnlineScreen):
+   - انتخاب موضوع + متن پیام + «ارسال پیام به مدیریت» + لیست تیکت‌ها و پاسخ مدیر
+8. حساب کاربری (AccountTab):
+   - تغییر آواتار + کد پرسنلی + کارت عملکرد رفتاری
+   - کارت شبا + تشخیص بانک + دکمه «اصلاح شماره شبا»
+   - بایگانی پرونده‌ها و فاکتورهای ثبت‌شده
+   - دکمه «تغییر دسته‌بندی و مهارت تخصصی»
+   - اطلاعات هویتی قفل‌شده + دکمه «خروج از حساب کاربری»
+9. پنل زیبایی (BeautySpecialistDashboardScreen):
+   - هدر پروفایل (ویرایش آواتار + همگام‌سازی با سرور)
+   - زیرتب‌ها: مهارت‌ها (۸ مهارت چندانتخابی) | نمونه‌کارها (افزودن/حذف <1MB) | قیمت‌ها (ثبت قیمت پیشنهادی و نمایش وضعیت تایید مدیر) | ساعت‌های خالی هفته (day_0 تا day_6) | نوبت‌های رزرو شده (دکمه «لغو و آزادی ساعت نوبت»)
+
+د) دیالوگ‌های سراسری (Modals):
+- MissionInvoiceDialog (رسید اتمام کار)
+- InstantSettlementDialog (تایید تسویه آنی شبا)
+- InvoiceDossierDetailDialog (نمایش کامل پرونده، اقلام و عکس فاکتور)
+- SupportTicketDialog (پشتیبانی سریع از منوی همبرگری)
+- IranMapLocationPickerDialog (انتخاب استان، شهر و نقطه روی نقشه)
+- دیالوگ اصلاح شماره شبا (با تشخیص زنده بانک)
+- دیالوگ تغییر مهارت تخصصی (با جستجو)
+- دیالوگ تضاد نشست / ورود از دستگاه دیگر (SESSION_CONFLICT) و هشدار خروج دستگاه قبلی
+- دیالوگ قطع ارتباط شبکه
+- دیالوگ اجباری حذف مهارت توسط مدیریت (isSkillDeletedByAdmin)
+- دیالوگ افزودن نمونه‌کار جدید (پنل زیبایی)
+- ServerConnectionDialog (وضعیت سرور و همگام‌سازی فوری)

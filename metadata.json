@@ -1,0 +1,6 @@
+{
+  "name": "وب‌سایت جامع تندیس",
+  "description": "سامانه جامع خدمات آنلاین در محل، نوبت‌دهی زیبایی، فروشگاه قطعات، اعتبار تندیس‌پی و پشتیبانی شبانه‌روزی تندیس",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
