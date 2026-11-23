@@ -12,9 +12,14 @@ const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT || 3000);
 const DJANGO_BASE_URL =
-  (process.env.TANDIS_DJANGO_BASE_URL || 'http://62.3.42.195:8000/api/v1/').replace(/\/+$/, '') + '/';
+  (
+    process.env.TANDIS_DJANGO_BASE_URL ||
+    process.env.TANDIS_API_URL ||
+    'http://62.3.42.195:8000/api/v1/'
+  ).replace(/\/+$/, '') + '/';
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 
@@ -1744,15 +1749,221 @@ app.all('/api/v1/*', async (req, res) => {
   }
 });
 
+// نقشه رسمی مسیرهای صفحات وب‌سایت تندیس (برای SSR متا تگ‌ها، سئو و لینک مستقیم هر صفحه)
+const PAGE_SEO_ROUTES = [
+  {
+    paths: ['/', '/home'],
+    canonical: '/',
+    title: 'تندیس | خدمات در محل، تعمیرات، زیبایی و تندیس‌پی',
+    description: 'تندیس؛ درخواست آنلاین خدمات در محل، تعمیرات لوازم خانگی، امداد خودرو، نظافت، زیبایی و سلامت، قطعات اصلی و اعتبار تندیس‌پی در سراسر ایران.',
+  },
+  {
+    paths: ['/app', '/downloads', '/download'],
+    canonical: '/app',
+    title: 'دانلود اپلیکیشن تندیس و تندیس همکار | تندیس',
+    description: 'دانلود مستقیم آخرین نسخه سوپر اپلیکیشن تندیس (مشتریان) و اپلیکیشن تندیس همکار (متخصصان) با لینک رسمی سرور تندیس.',
+  },
+  {
+    paths: ['/services', '/services/:slug'],
+    canonical: '/services',
+    title: 'خدمات در محل تندیس | ۳۱ خدمت تخصصی با ضمانت',
+    description: 'مشاهده و ثبت درخواست آنلاین ۳۱ خدمت تخصصی تندیس شامل تعمیرات، خودرو، نظافت، پزشکی، حقوقی، زیبایی و خدمات فنی.',
+  },
+  {
+    paths: ['/beauty', '/services/beauty'],
+    canonical: '/beauty',
+    title: 'زیبایی بانوان و نوبت‌دهی آنلاین | تندیس',
+    description: 'رزرو آنلاین نوبت خدمات زیبایی بانوان با متخصصان تاییدشده، مشاهده نمونه‌کارها و تقویم ۳۰ روزه تندیس.',
+  },
+  {
+    paths: ['/store', '/parts'],
+    canonical: '/store',
+    title: 'فروشگاه قطعات اصلی تندیس | تندیس',
+    description: 'استعلام و درخواست قطعات اصلی لوازم خانگی و فنی با ضمانت اصالت در فروشگاه آنلاین قطعات تندیس.',
+  },
+  {
+    paths: ['/tandispay', '/wallet'],
+    canonical: '/tandispay',
+    title: 'تندیس‌پی؛ کیف پول و اعتبار اقساطی | تندیس',
+    description: 'مدیریت کیف پول تندیس‌پی، شارژ آنلاین و درخواست اعتبار اقساطی خدمات بدون ضامن.',
+  },
+  {
+    paths: ['/orders', '/requests'],
+    canonical: '/orders',
+    title: 'پیگیری درخواست‌ها و فاکتورها | تندیس',
+    description: 'مشاهده وضعیت زنده درخواست‌های فعال، فاکتورهای رسمی صادرشده و امتیازدهی به متخصصان تندیس.',
+  },
+  {
+    paths: ['/hamkar', '/hamkar/login', '/expert'],
+    canonical: '/hamkar',
+    title: 'پنل وب تندیس همکار | سامانه متخصصان تندیس',
+    description: 'ورود پیامکی به پنل مستقل متخصصان تندیس همکار، رادار زنده سفارش‌ها، صدور فاکتور رسمی، کیف پول و تسویه شبا.',
+  },
+  {
+    paths: ['/hamkar/signup', '/hamkar/register', '/provider-signup'],
+    canonical: '/hamkar/signup',
+    title: 'ثبت‌نام متخصص و همکار جدید | تندیس همکار',
+    description: 'ثبت‌نام آنلاین ۵ مرحله‌ای متخصصان و کارشناسان در سامانه تندیس همکار و دریافت سفارش‌های زنده شهر شما.',
+  },
+  {
+    paths: ['/signup', '/register'],
+    canonical: '/signup',
+    title: 'ثبت‌نام عضویت مشتری | تندیس',
+    description: 'ساخت حساب کاربری در سامانه جامع خدمات تندیس برای ثبت و پیگیری سریع درخواست‌ها.',
+  },
+  {
+    paths: ['/about', '/contact'],
+    canonical: '/about',
+    title: 'درباره تندیس و نماد اعتماد | تندیس',
+    description: 'معرفی سامانه جامع تندیس، نماد اعتماد الکترونیکی (اینماد)، ضمانت خدمات و راه‌های ارتباط با پشتیبانی ۲۴ ساعته.',
+  },
+];
+
+function escapeHtmlAttr(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function renderHtmlWithSeo(baseHtml, routeMeta) {
+  if (!routeMeta) return baseHtml;
+  const safeTitle = escapeHtmlAttr(routeMeta.title);
+  const safeDesc = escapeHtmlAttr(routeMeta.description);
+  return baseHtml
+    .replace(/<title>[\s\S]*?<\/title>/i, `<title>${safeTitle}</title>`)
+    .replace(
+      /<meta\s+name="description"\s+content="[\s\S]*?"\s*\/>/i,
+      `<meta name="description" content="${safeDesc}" />`
+    )
+    .replace(
+      /<meta\s+property="og:title"\s+content="[\s\S]*?"\s*\/>/i,
+      `<meta property="og:title" content="${safeTitle}" />`
+    )
+    .replace(
+      /<meta\s+property="og:description"\s+content="[\s\S]*?"\s*\/>/i,
+      `<meta property="og:description" content="${safeDesc}" />`
+    )
+    .replace(
+      /<meta\s+name="twitter:title"\s+content="[\s\S]*?"\s*\/>/i,
+      `<meta name="twitter:title" content="${safeTitle}" />`
+    )
+    .replace(
+      /<meta\s+name="twitter:description"\s+content="[\s\S]*?"\s*\/>/i,
+      `<meta name="twitter:description" content="${safeDesc}" />`
+    );
+}
+
+// لیست رسمی لینک صفحات در API برای بررسی یا استفاده خارجی
+app.get('/api/routes', (_req, res) => {
+  res.json({
+    ok: true,
+    routes: PAGE_SEO_ROUTES.map((r) => ({
+      path: r.canonical,
+      aliases: r.paths,
+      title: r.title,
+    })),
+  });
+});
+
+// فایل robots.txt و sitemap.xml داینامیک برای تمام مسیرهای صفحات
+app.get('/robots.txt', (req, res) => {
+  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+  const host = req.headers.host || 'tandiis.com';
+  res
+    .type('text/plain; charset=utf-8')
+    .send(`User-agent: *\nAllow: /\nSitemap: ${proto}://${host}/sitemap.xml\n`);
+});
+
+app.get('/sitemap.xml', (req, res) => {
+  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+  const host = req.headers.host || 'tandiis.com';
+  const urls = PAGE_SEO_ROUTES.map((r) => `  <url><loc>${proto}://${host}${r.canonical}</loc></url>`).join('\n');
+  res
+    .type('application/xml; charset=utf-8')
+    .send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
+});
+
 // سرو فایل‌های ساخته‌شده نسخه تولید وب‌سایت (و پشتیبانی خودکار از Vite در نبود پوشه dist)
 async function startServer() {
   const distDir = path.join(__dirname, 'dist');
   const distIndex = path.join(distDir, 'index.html');
 
   if (fs.existsSync(distIndex)) {
-    app.use(express.static(distDir));
-    app.get('*', (_req, res) => {
-      res.sendFile(distIndex);
+    const baseIndexHtml = fs.readFileSync(distIndex, 'utf8');
+
+    // در محیط پیش‌نمایش (run.app / localhost)، سرویس‌ورکر قبلی را خودکار پاک و صفحه را بازیابی کن تا هرگز صفحه سفید نشود
+    app.get('/sw.js', (req, res, next) => {
+      const host = String(req.headers.host || req.hostname || '');
+      if (/(localhost|127\.0\.0\.1|\.run\.app)/i.test(host)) {
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        return res.send(`
+self.addEventListener('install', () => { self.skipWaiting(); });
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    try {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    } catch (e) {}
+    try {
+      await self.registration.unregister();
+    } catch (e) {}
+    try {
+      const clients = await self.clients.matchAll({ type: 'window' });
+      for (const client of clients) {
+        client.navigate(client.url);
+      }
+    } catch (e) {}
+  })());
+});
+`);
+      }
+      return next();
+    });
+
+    // ثبت صریح هر مسیر صفحه روی بک‌اند با متاتگ و عنوان اختصاصی خودش
+    for (const routeDef of PAGE_SEO_ROUTES) {
+      app.get(routeDef.paths, (_req, res) => {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.type('text/html; charset=utf-8').send(renderHtmlWithSeo(baseIndexHtml, routeDef));
+      });
+    }
+
+    app.use((req, res, next) => {
+      if (req.path === '/' || req.path === '/index.html' || req.path === '/sw.js' || req.path === '/manifest.webmanifest') {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      }
+      next();
+    });
+    app.use(
+      express.static(distDir, {
+        index: false,
+        setHeaders(res, filePath) {
+          if (filePath.endsWith('.html') || filePath.endsWith('sw.js')) {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+          }
+        },
+      })
+    );
+    app.get('*', (req, res) => {
+      // هرگز برای فایل‌های JS/CSS/تصویر مفقودشده، HTML برنگردان تا خطای MIME رخ ندهد
+      if (
+        req.path.startsWith('/assets/') ||
+        req.path.startsWith('/api/') ||
+        /\.(js|mjs|css|map|png|jpg|jpeg|webp|svg|ico|woff2?|ttf)$/i.test(req.path)
+      ) {
+        return res.status(404).type('text/plain').send('Not Found');
+      }
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      return res.type('text/html; charset=utf-8').send(baseIndexHtml);
     });
   } else {
     const { createServer: createViteServer } = await import('vite');

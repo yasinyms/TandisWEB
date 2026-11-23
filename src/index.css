@@ -184,6 +184,21 @@
   pointer-events: none;
 }
 
+.tandis-skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: #e4f0f0;
+}
+
+.tandis-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.65) 50%, transparent 100%);
+  animation: tandisShimmer 1.45s ease-in-out infinite;
+  pointer-events: none;
+}
+
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
@@ -192,7 +207,8 @@
   .tandis-calm-gradient,
   .tandis-logo-motion,
   .tandis-float,
-  .tandis-shimmer-sweep::after {
+  .tandis-shimmer-sweep::after,
+  .tandis-skeleton::after {
     animation: none !important;
   }
 }

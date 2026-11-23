@@ -1,7 +1,10 @@
 node_modules/
 build/
 dist/
+dev-dist/
 coverage/
+.aistudio/
+maintenance.on
 .DS_Store
 *.log
 .env*

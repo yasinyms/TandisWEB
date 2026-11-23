@@ -70,10 +70,10 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
     { id: 'services', label: 'خدمات در محل', icon: Wrench },
     { id: 'store', label: 'فروشگاه قطعات', icon: ShoppingBag },
     { id: 'tandispay', label: 'تندیس‌پی', icon: Wallet },
-    { id: 'orders', label: 'سفارش‌ها', icon: ReceiptText },
+    { id: 'orders', label: 'درخواست‌ها', icon: ReceiptText },
     { id: 'downloads', label: 'دانلود اپلیکیشن', icon: Download },
-    { id: 'provider-signup', label: 'ثبت‌نام همکار', icon: Handshake },
-    { id: 'expert-login', label: 'ورود کارشناس', icon: ShieldCheck },
+    { id: 'hamkar-panel', label: 'پنل تندیس همکار (ورود)', icon: ShieldCheck },
+    { id: 'provider-signup', label: 'ثبت‌نام متخصص جدید', icon: Handshake },
     { id: 'about', label: 'درباره ما', icon: Info },
   ];
 

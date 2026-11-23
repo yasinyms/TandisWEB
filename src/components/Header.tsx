@@ -71,7 +71,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'home', label: 'خانه' },
     { id: 'services', label: 'خدمات' },
     { id: 'downloads', label: 'دانلود' },
-    { id: 'provider-signup', label: 'همکاری' },
+    { id: 'hamkar-panel', label: 'پنل همکار' },
   ];
 
   return (

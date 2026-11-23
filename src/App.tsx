@@ -23,9 +23,9 @@ import { SearchBar } from './components/SearchBar';
 import { HeroCarousel } from './components/HeroCarousel';
 import { CategoriesGrid } from './components/CategoriesGrid';
 import { CtaBanner } from './components/CtaBanner';
-import { ProviderSignupView } from './components/ProviderSignupView';
+import { HomeSkeleton } from './components/HomeSkeleton';
+import { HamkarPanelShell } from './components/hamkar/HamkarPanelShell';
 import { CustomerSignupView } from './components/CustomerSignupView';
-import { ExpertLoginView } from './components/ExpertLoginView';
 import { AboutTandisView, RatingDialog, SupportTicketsModal } from './components/AboutSupportModals';
 import { AppDownloadsView } from './components/AppDownloadsView';
 import { BeautySalonView } from './components/BeautySalonView';
@@ -46,7 +46,6 @@ import {
 import {
   DEFAULT_CATEGORIES,
   DEFAULT_ONLINE_STORE_PARTS,
-  DEFAULT_SLIDERS,
   TRENDING_SEARCH_TAGS,
   formatToman,
   statusPersianLabel,
@@ -64,17 +63,13 @@ import type {
   SupportTicket,
   TandisCityInfo,
 } from './types/tandis';
-
-type MainView =
-  | 'home'
-  | 'services'
-  | 'downloads'
-  | 'provider-signup'
-  | 'customer-signup'
-  | 'expert-login'
-  | 'about';
-
-type ServiceSubTab = 'catalog' | 'store' | 'tandispay' | 'orders';
+import {
+  ROUTE_TITLES,
+  parseRouteFromLocation,
+  pushBrowserPath,
+  type MainView,
+  type ServiceSubTab,
+} from './services/routes';
 
 const VIEW_TRANSITION = {
   initial: { opacity: 0, y: 14 },
@@ -95,8 +90,16 @@ const HOME_CATEGORY_TO_SERVICE_SLUG: Record<string, string> = {
 };
 
 export default function App() {
-  const [activeView, setActiveView] = useState<MainView>('home');
-  const [serviceSubTab, setServiceSubTab] = useState<ServiceSubTab>('catalog');
+  const initialRoute = useMemo(() => {
+    if (typeof window !== 'undefined') {
+      return parseRouteFromLocation(window.location.pathname, window.location.hash);
+    }
+    return parseRouteFromLocation('/', '');
+  }, []);
+
+  const [activeView, setActiveView] = useState<MainView>(initialRoute.activeView);
+  const [hamkarInitialMode, setHamkarInitialMode] = useState<'login' | 'signup'>(initialRoute.hamkarMode);
+  const [serviceSubTab, setServiceSubTab] = useState<ServiceSubTab>(initialRoute.serviceSubTab);
 
   // هویت و شهر ذخیره‌شده
   const [phone, setPhone] = useState<string>(() => localStorage.getItem('tandis_phone') || '');
@@ -108,14 +111,17 @@ export default function App() {
   // جستجو و فیلتر خدمات
   const [searchQuery, setSearchQuery] = useState('');
   const [serviceSearchQuery, setServiceSearchQuery] = useState('');
-  const [selectedGroupSlug, setSelectedGroupSlug] = useState<string>('all');
-  const [showBeautyBookingInsideCategory, setShowBeautyBookingInsideCategory] = useState(false);
+  const [selectedGroupSlug, setSelectedGroupSlug] = useState<string>(initialRoute.selectedGroupSlug);
+  const [showBeautyBookingInsideCategory, setShowBeautyBookingInsideCategory] = useState(
+    initialRoute.showBeautyBooking
+  );
 
   // منوی کشویی
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // داده‌های زنده سرور مرکزی تندیس
   const [liveState, setLiveState] = useState<LiveStatePayload | null>(null);
+  const [initialLoading, setInitialLoading] = useState<boolean>(true);
   const [syncing, setSyncing] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -187,18 +193,44 @@ export default function App() {
         // در صورت اختلال لحظه‌ای شبکه، داده فعلی حفظ می‌شود
       } finally {
         setSyncing(false);
+        setInitialLoading(false);
       }
     },
     [phone, customerName, showToast]
   );
 
   useEffect(() => {
+    const failsafe = window.setTimeout(() => setInitialLoading(false), 4000);
     runLiveSync(phone);
     const timer = window.setInterval(() => {
       runLiveSync(phone);
     }, 6000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearTimeout(failsafe);
+      window.clearInterval(timer);
+    };
   }, [phone, runLiveSync]);
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.title = initialRoute.pageTitle;
+    }
+    const syncFromBrowserUrl = () => {
+      const resolved = parseRouteFromLocation(window.location.pathname, window.location.hash);
+      setActiveView(resolved.activeView);
+      setServiceSubTab(resolved.serviceSubTab);
+      setSelectedGroupSlug(resolved.selectedGroupSlug);
+      setShowBeautyBookingInsideCategory(resolved.showBeautyBooking);
+      setHamkarInitialMode(resolved.hamkarMode);
+      document.title = resolved.pageTitle;
+    };
+    window.addEventListener('popstate', syncFromBrowserUrl);
+    window.addEventListener('hashchange', syncFromBrowserUrl);
+    return () => {
+      window.removeEventListener('popstate', syncFromBrowserUrl);
+      window.removeEventListener('hashchange', syncFromBrowserUrl);
+    };
+  }, [initialRoute.pageTitle]);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem('tandis_phone');
@@ -286,10 +318,11 @@ export default function App() {
     });
   }, [liveState?.categories]);
 
+  // صرفاً اسلایدرهای واقعی دریافت‌شده از سرور مرکزی (بدون نمایش اسلایدرهای پیش‌فرض ساختگی)
   const liveSliders: PromoSlide[] = useMemo(() => {
     const raw = liveState?.sliders;
     if (Array.isArray(raw) && raw.length > 0) return raw;
-    return DEFAULT_SLIDERS;
+    return [];
   }, [liveState?.sliders]);
 
   const ota = liveState?.otaConfig;
@@ -348,6 +381,7 @@ export default function App() {
       setShowBeautyBookingInsideCategory(true);
       setActiveView('services');
       setServiceSubTab('catalog');
+      pushBrowserPath('/beauty', ROUTE_TITLES['/beauty']);
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
@@ -360,16 +394,30 @@ export default function App() {
 
   const handleNavigate = useCallback((dest: string) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (dest === 'hamkar-panel' || dest === 'expert-login') {
+      setHamkarInitialMode('login');
+      setActiveView('hamkar-panel');
+      pushBrowserPath('/hamkar', ROUTE_TITLES['/hamkar']);
+      return;
+    }
+    if (dest === 'provider-signup') {
+      setHamkarInitialMode('signup');
+      setActiveView('hamkar-panel');
+      pushBrowserPath('/hamkar/signup', ROUTE_TITLES['/hamkar/signup']);
+      return;
+    }
     if (dest === 'beauty') {
       setSelectedGroupSlug('cat-beauty-personal');
       setShowBeautyBookingInsideCategory(true);
       setActiveView('services');
       setServiceSubTab('catalog');
+      pushBrowserPath('/beauty', ROUTE_TITLES['/beauty']);
       return;
     }
     if (dest === 'store' || dest === 'tandispay' || dest === 'orders') {
       setActiveView('services');
       setServiceSubTab(dest);
+      pushBrowserPath(`/${dest}`, ROUTE_TITLES[`/${dest}`]);
       return;
     }
     if (dest === 'services') {
@@ -377,20 +425,26 @@ export default function App() {
       setShowBeautyBookingInsideCategory(false);
       setActiveView('services');
       setServiceSubTab('catalog');
+      pushBrowserPath('/services', ROUTE_TITLES['/services']);
       return;
     }
-    if (
-      dest === 'home' ||
-      dest === 'downloads' ||
-      dest === 'provider-signup' ||
-      dest === 'customer-signup' ||
-      dest === 'expert-login' ||
-      dest === 'about'
-    ) {
-      setActiveView(dest);
+    if (dest === 'downloads') {
+      setActiveView('downloads');
+      pushBrowserPath('/app', ROUTE_TITLES['/app']);
+      return;
+    }
+    if (dest === 'customer-signup') {
+      setActiveView('customer-signup');
+      pushBrowserPath('/signup', ROUTE_TITLES['/signup']);
+      return;
+    }
+    if (dest === 'about') {
+      setActiveView('about');
+      pushBrowserPath('/about', ROUTE_TITLES['/about']);
       return;
     }
     setActiveView('home');
+    pushBrowserPath('/', ROUTE_TITLES['/']);
   }, []);
 
   const handleSelectHomeCategory = (catId: string) => {
@@ -405,6 +459,13 @@ export default function App() {
     setServiceSearchQuery('');
     setActiveView('services');
     setServiceSubTab('catalog');
+    if (targetSlug === 'cat-beauty-personal') {
+      pushBrowserPath('/beauty', ROUTE_TITLES['/beauty']);
+    } else if (targetSlug && targetSlug !== 'all') {
+      pushBrowserPath(`/services/${targetSlug}`, ROUTE_TITLES['/services']);
+    } else {
+      pushBrowserPath('/services', ROUTE_TITLES['/services']);
+    }
   };
 
   const handleSearchSubmit = () => {
@@ -413,6 +474,7 @@ export default function App() {
     setSelectedGroupSlug('all');
     setActiveView('services');
     setServiceSubTab('catalog');
+    pushBrowserPath('/services', ROUTE_TITLES['/services']);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -465,6 +527,18 @@ export default function App() {
     { id: 'tandispay', label: 'تندیس‌پی', icon: Wallet },
     { id: 'orders', label: 'درخواست‌ها', icon: ReceiptText },
   ];
+
+  // پنل مستقل تندیس همکار (کاملاً مجزا از نمای مشتری سایت)
+  if (activeView === 'hamkar-panel') {
+    return (
+      <MotionConfig reducedMotion="user">
+        <HamkarPanelShell
+          initialMode={hamkarInitialMode}
+          onBackToSite={() => handleNavigate('home')}
+        />
+      </MotionConfig>
+    );
+  }
 
   return (
     <MotionConfig reducedMotion="user">
@@ -524,8 +598,14 @@ export default function App() {
 
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10">
             <AnimatePresence mode="wait">
-              {/* صفحه اصلی */}
-              {activeView === 'home' && (
+              {/* صفحه اصلی با Skeleton UI در زمان بارگذاری اولیه */}
+              {activeView === 'home' && initialLoading && (
+                <motion.div key="view-home-skeleton" {...VIEW_TRANSITION}>
+                  <HomeSkeleton />
+                </motion.div>
+              )}
+
+              {activeView === 'home' && !initialLoading && (
                 <motion.div key="view-home" {...VIEW_TRANSITION} className="space-y-8 sm:space-y-10">
                   {/* نوار جستجو و انتخاب شهر */}
                   <SearchBar
@@ -625,12 +705,14 @@ export default function App() {
                         setShowBeautyBookingInsideCategory(true);
                         setActiveView('services');
                         setServiceSubTab('catalog');
+                        pushBrowserPath('/beauty', ROUTE_TITLES['/beauty']);
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       } else if (slug) {
                         setSelectedGroupSlug(slug);
                         setShowBeautyBookingInsideCategory(false);
                         setActiveView('services');
                         setServiceSubTab('catalog');
+                        pushBrowserPath(`/services/${slug}`, ROUTE_TITLES['/services']);
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       } else {
                         handleNavigate('services');
@@ -715,7 +797,11 @@ export default function App() {
                           <button
                             key={tab.id}
                             type="button"
-                            onClick={() => setServiceSubTab(tab.id)}
+                            onClick={() => {
+                              setServiceSubTab(tab.id);
+                              const nextPath = tab.id === 'catalog' ? '/services' : `/${tab.id}`;
+                              pushBrowserPath(nextPath, ROUTE_TITLES[nextPath]);
+                            }}
                             className={`relative flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
                               active
                                 ? 'text-white'
@@ -745,7 +831,10 @@ export default function App() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => setServiceSubTab('tandispay')}
+                        onClick={() => {
+                          setServiceSubTab('tandispay');
+                          pushBrowserPath('/tandispay', ROUTE_TITLES['/tandispay']);
+                        }}
                         className="rounded-xl bg-[#f2a900]/15 hover:bg-[#f2a900]/25 text-[#9a6700] px-3 py-1.5 text-[11px] font-black transition-colors cursor-pointer whitespace-nowrap"
                       >
                         شارژ سریع
@@ -1214,13 +1303,6 @@ export default function App() {
                 </motion.div>
               )}
 
-              {/* ثبت‌نام همکار و متخصص */}
-              {activeView === 'provider-signup' && (
-                <motion.div key="view-provider" {...VIEW_TRANSITION}>
-                  <ProviderSignupView onBackToHome={() => handleNavigate('home')} />
-                </motion.div>
-              )}
-
               {/* ثبت‌نام مشتری */}
               {activeView === 'customer-signup' && (
                 <motion.div key="view-customer-signup" {...VIEW_TRANSITION}>
@@ -1242,19 +1324,6 @@ export default function App() {
                         runLiveSync(cleanPhone);
                       }
                       showToast(`خوش آمدید ${fullName}!`);
-                      handleNavigate('home');
-                    }}
-                  />
-                </motion.div>
-              )}
-
-              {/* پرتال ورود کارشناس */}
-              {activeView === 'expert-login' && (
-                <motion.div key="view-expert-login" {...VIEW_TRANSITION}>
-                  <ExpertLoginView
-                    onBackToHome={() => handleNavigate('home')}
-                    onLoginSuccess={(expert) => {
-                      showToast(`ورود کارشناس ${expert.name || ''} با موفقیت انجام شد.`);
                       handleNavigate('home');
                     }}
                   />
@@ -1385,6 +1454,7 @@ export default function App() {
             showToast(msg);
             setActiveView('services');
             setServiceSubTab('orders');
+            pushBrowserPath('/orders', ROUTE_TITLES['/orders']);
             runLiveSync(phone);
           }}
         />
