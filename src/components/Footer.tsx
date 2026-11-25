@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Shield, ShieldCheck, PhoneCall } from 'lucide-react';
+import React from 'react';
+import { Shield, PhoneCall } from 'lucide-react';
 import { toPersianDigits } from '../services/tandisDefaults';
 
 const CUSTOMER_LOGO_SRC = '/assets/aistudio/WhatsApp_Image_2026-11-15_at_17.37.57_b48837a8.jpeg';
@@ -16,9 +16,8 @@ interface FooterProps {
 export const Footer: React.FC<FooterProps> = ({
   onNavClick,
   onOpenSupport,
-  supportPhone = '061-53220000',
+  supportPhone = '09307327975',
 }) => {
-  const [enamadLoaded, setEnamadLoaded] = useState(false);
 
   return (
     <footer className="w-full bg-[#eef6f6] border-t border-[#dcecec] mt-12 no-print">
@@ -85,6 +84,13 @@ export const Footer: React.FC<FooterProps> = ({
               </button>
               <button
                 type="button"
+                onClick={() => onNavClick('news')}
+                className="text-right hover:text-[#0b5c60] transition-colors cursor-pointer"
+              >
+                اخبار و مقالات (به‌زودی)
+              </button>
+              <button
+                type="button"
                 onClick={() => onNavClick('downloads')}
                 className="text-right font-bold text-[#0b5c60] hover:underline transition-colors cursor-pointer"
               >
@@ -112,6 +118,13 @@ export const Footer: React.FC<FooterProps> = ({
               </button>
               <button
                 type="button"
+                onClick={() => onNavClick('management')}
+                className="text-right hover:text-[#0b5c60] transition-colors cursor-pointer"
+              >
+                مدیریت و کارشناسان
+              </button>
+              <button
+                type="button"
                 onClick={onOpenSupport}
                 className="text-right hover:text-[#0b5c60] transition-colors cursor-pointer"
               >
@@ -130,29 +143,17 @@ export const Footer: React.FC<FooterProps> = ({
           <div className="space-y-3">
             <h3 className="text-xs font-black text-[#12292c]">نماد اعتماد</h3>
             <div className="flex items-center gap-3">
-              <div className="relative w-24 h-24 rounded-2xl bg-white border border-[#d6ebeb] hover:border-[#0a8387] flex items-center justify-center p-2 text-center transition-colors overflow-hidden">
-                {!enamadLoaded && (
-                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 text-[#0b5c60]">
-                    <ShieldCheck className="w-6 h-6 text-[#0a8387]" />
-                    <span className="text-[10px] font-bold">اینماد رسمی</span>
-                  </div>
-                )}
+              <div className="w-24 h-24 rounded-2xl bg-white border border-[#d6ebeb] hover:border-[#0a8387] flex items-center justify-center p-2 text-center transition-colors overflow-hidden [&_a]:flex [&_a]:items-center [&_a]:justify-center [&_a]:w-full [&_a]:h-full [&_img]:max-w-full [&_img]:max-h-full [&_img]:object-contain">
                 <a
                   referrerPolicy="origin"
                   target="_blank"
                   href={ENAMAD_URL}
-                  title="نماد اعتماد الکترونیکی تندیس"
-                  className="relative z-10 w-full h-full flex items-center justify-center"
                 >
                   <img
                     referrerPolicy="origin"
                     src={ENAMAD_LOGO_SRC}
                     alt=""
                     style={{ cursor: 'pointer' }}
-                    onLoad={(e) => {
-                      if (e.currentTarget.naturalWidth > 0) setEnamadLoaded(true);
-                    }}
-                    className={`w-16 h-16 object-contain ${enamadLoaded ? 'opacity-100' : 'opacity-0'}`}
                     {...({ code: ENAMAD_CODE } as Record<string, string>)}
                   />
                 </a>
@@ -170,17 +171,17 @@ export const Footer: React.FC<FooterProps> = ({
           <div className="flex items-center gap-5">
             <button
               type="button"
-              onClick={() => onNavClick('about')}
+              onClick={() => onNavClick('privacy')}
               className="hover:text-[#12292c] transition-colors cursor-pointer"
             >
               حریم خصوصی
             </button>
             <button
               type="button"
-              onClick={() => onNavClick('about')}
+              onClick={() => onNavClick('terms')}
               className="hover:text-[#12292c] transition-colors cursor-pointer"
             >
-              قوانین
+              قوانین و عودت وجه
             </button>
           </div>
         </div>

@@ -1,146 +1,117 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { CATEGORIES, Category } from '../data/mockData';
-import { Fluent3DCategoryIcon } from './Fluent3DCategoryIcon';
+import React from 'react';
+import { motion } from 'motion/react';
+import { ChevronLeft } from 'lucide-react';
+import type { ServiceCategoryGroup } from '../types/tandis';
+import { toPersianDigits, toPurePersianText } from '../services/tandisDefaults';
+import { ServiceApiIcon } from './ServiceApiIcon';
 
 interface CategoriesGridProps {
+  categories?: ServiceCategoryGroup[];
   selectedCategoryId: string;
-  onSelectCategory: (categoryId: string) => void;
+  onSelectCategory: (categorySlug: string) => void;
 }
 
-const CATEGORY_DISPLAY_META: Record<string, { title: string; hoverGlow: string }> = {
-  services: {
-    title: 'فنی و تعمیرات',
-    hoverGlow: 'hover:shadow-[0_14px_30px_-10px_rgba(249,115,22,0.2)] hover:border-orange-200/90',
-  },
-  auto: {
-    title: 'امداد خودرو',
-    hoverGlow: 'hover:shadow-[0_14px_30px_-10px_rgba(14,165,233,0.2)] hover:border-sky-200/90',
-  },
-  home: {
-    title: 'نظافت و باربری',
-    hoverGlow: 'hover:shadow-[0_14px_30px_-10px_rgba(16,185,129,0.2)] hover:border-emerald-200/90',
-  },
-  events: {
-    title: 'پزشکی و پرستاری',
-    hoverGlow: 'hover:shadow-[0_14px_30px_-10px_rgba(244,63,94,0.2)] hover:border-rose-200/90',
-  },
-  legal: {
-    title: 'حقوقی و اداری',
-    hoverGlow: 'hover:shadow-[0_14px_30px_-10px_rgba(139,92,246,0.2)] hover:border-violet-200/90',
-  },
-  apparel: {
-    title: 'زیبایی و سلامت',
-    hoverGlow: 'hover:shadow-[0_14px_30px_-10px_rgba(236,72,153,0.2)] hover:border-pink-200/90',
-  },
-  industrial: {
-    title: 'صنعت و دیجیتال',
-    hoverGlow: 'hover:shadow-[0_14px_30px_-10px_rgba(59,130,246,0.2)] hover:border-blue-200/90',
-  },
-};
-
-export const CategoriesGrid: React.FC<CategoriesGridProps> = ({ onSelectCategory }) => {
-  const [showRideNotice, setShowRideNotice] = useState(false);
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
-
-  const handleRideRequestClick = () => {
-    setShowRideNotice(true);
-    setTimeout(() => {
-      setShowRideNotice(false);
-    }, 2800);
-  };
+export const CategoriesGrid: React.FC<CategoriesGridProps> = ({
+  categories = [],
+  selectedCategoryId,
+  onSelectCategory
+}) => {
+  // نمایش دسته‌های اصلی به همراه هر دسته‌بندی جدیدی که از نرم‌افزار تندیس مدیریت اضافه شده است
+  const orderedCategories = [...categories].sort((a, b) => {
+    if (a.slug === 'cat-ride-request') return 1;
+    if (b.slug === 'cat-ride-request') return -1;
+    return 0;
+  });
 
   return (
     <motion.section
-      initial={{ opacity: 0, y: 14 }}
+      initial={{ opacity: 0, y: 12 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.12 }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
       className="space-y-4"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+      <div className="flex items-center justify-between gap-2 px-1">
         <div className="flex items-center gap-2">
-          <span className="w-1 h-5 bg-[#0a8387] rounded-full" />
-          <h2 className="text-base sm:text-lg font-black text-[#12292c]">دسته‌بندی خدمات</h2>
+          <span className="w-1.5 h-5 bg-[#0a8387] rounded-full" />
+          <h2 className="text-base sm:text-lg font-black text-[#12292c]">دسته‌بندی خدمات تندیس</h2>
         </div>
-
-        <AnimatePresence>
-          {showRideNotice && (
-            <motion.span
-              key="ride-notice"
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              className="text-[#0a8387] bg-[#effcfb] border border-[#0a8387]/25 px-3 py-1 rounded-xl text-xs font-bold"
-            >
-              درخواست خودرو به‌زودی فعال می‌شود
-            </motion.span>
-          )}
-        </AnimatePresence>
+        <span className="text-xs font-bold text-[#5f777b]">
+          انتخاب سریع از بین {toPersianDigits(orderedCategories.length)} گروه تخصصی
+        </span>
       </div>
 
-      <div className="rounded-3xl bg-white border border-[#e2efef] px-4 py-6 sm:px-8 sm:py-8 shadow-[0_6px_26px_-14px_rgba(10,131,135,0.1)]">
-        <div className="max-w-4xl mx-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5 sm:gap-5 lg:gap-6 justify-items-center">
-          <motion.button
-            type="button"
-            whileHover={{ y: -5, scale: 1.04 }}
-            whileTap={{ scale: 0.96 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 22 }}
-            onMouseEnter={() => setHoveredId('ride')}
-            onMouseLeave={() => setHoveredId(null)}
-            onClick={handleRideRequestClick}
-            aria-disabled="true"
-            title="درخواست خودرو (به‌زودی)"
-            className="group relative w-34 h-34 sm:w-36 sm:h-36 md:w-38 md:h-38 lg:w-42 lg:h-42 rounded-full flex flex-col items-center justify-center p-3 text-center cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#f2a900] bg-gradient-to-b from-[#0a8387] to-[#074d50] text-white border-2 border-[#f2a900] shadow-[0_14px_30px_-10px_rgba(10,131,135,0.42)] transition-shadow duration-300"
-          >
-            <div className="mb-2 shrink-0 group-hover:scale-105 transition-transform duration-300">
-              <Fluent3DCategoryIcon
-                id="ride"
-                isHovered={hoveredId === 'ride'}
-                className="w-13 h-13 sm:w-15 sm:h-15 lg:w-18 lg:h-18"
-              />
-            </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+        {orderedCategories.map((group) => {
+          const isSelected = selectedCategoryId === group.slug;
 
-            <span className="text-xs sm:text-sm font-bold text-white whitespace-nowrap leading-tight">
-              درخواست خودرو
-            </span>
-            <span className="text-[10px] text-[#fde68a] mt-0.5 font-medium">به‌زودی</span>
-          </motion.button>
+          return (
+            <motion.button
+              key={group.slug}
+              type="button"
+              whileHover={{ y: -3 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => onSelectCategory(group.slug)}
+              className={`group relative rounded-2xl p-4 sm:p-5 text-right transition-all duration-200 cursor-pointer border flex flex-col justify-between min-h-[124px] ${
+                isSelected
+                  ? 'bg-[#0a8387] text-white border-[#0a8387] shadow-[0_12px_28px_-10px_rgba(10,131,135,0.45)]'
+                  : 'bg-white text-[#12292c] border-[#e4f0f0] shadow-[0_4px_18px_-8px_rgba(15,23,42,0.05)] hover:shadow-[0_12px_26px_-10px_rgba(10,131,135,0.14)] hover:border-[#0a8387]/40'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2 w-full">
+                <ServiceApiIcon
+                  iconKey={group.iconKey}
+                  iconUrl={group.iconUrl}
+                  groupSlug={group.slug}
+                  colorHex={group.colorHex || group.accentHex}
+                  iconStyle={group.iconStyle}
+                  inverted={isSelected}
+                  size="md"
+                  alt={toPurePersianText(group.title)}
+                />
 
-          {CATEGORIES.map((cat: Category) => {
-            const meta = CATEGORY_DISPLAY_META[cat.id] || {
-              title: cat.name,
-              hoverGlow: '',
-            };
+                {group.isComingSoon ? (
+                  <span
+                    className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black ${
+                      isSelected
+                        ? 'bg-white/20 text-white'
+                        : 'bg-amber-50 text-amber-700 border border-amber-200/70'
+                    }`}
+                  >
+                    به‌زودی
+                  </span>
+                ) : (
+                  <span
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                      isSelected
+                        ? 'bg-white/15 text-white'
+                        : 'bg-[#f4fafa] text-[#5f777b] group-hover:bg-[#0a8387] group-hover:text-white'
+                    }`}
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </span>
+                )}
+              </div>
 
-            return (
-              <motion.button
-                key={cat.id}
-                type="button"
-                whileHover={{ y: -5, scale: 1.04 }}
-                whileTap={{ scale: 0.96 }}
-                transition={{ type: 'spring', stiffness: 320, damping: 22 }}
-                onMouseEnter={() => setHoveredId(cat.id)}
-                onMouseLeave={() => setHoveredId(null)}
-                onClick={() => onSelectCategory(cat.id)}
-                title={meta.title}
-                className={`group relative w-34 h-34 sm:w-36 sm:h-36 md:w-38 md:h-38 lg:w-42 lg:h-42 rounded-full flex flex-col items-center justify-center p-3 text-center cursor-pointer border select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0a8387] bg-[#fbfefe] border-[#e2efef] shadow-[0_6px_18px_-8px_rgba(15,23,42,0.06)] transition-shadow duration-300 ${meta.hoverGlow}`}
-              >
-                <div className="mb-2 shrink-0 group-hover:scale-105 transition-transform duration-300">
-                  <Fluent3DCategoryIcon
-                    id={cat.id}
-                    isHovered={hoveredId === cat.id}
-                    className="w-13 h-13 sm:w-15 sm:h-15 lg:w-18 lg:h-18"
-                  />
+              <div className="mt-3.5 space-y-1">
+                <div
+                  className={`text-sm sm:text-[15px] font-black leading-snug transition-colors ${
+                    isSelected ? 'text-white' : 'text-[#12292c] group-hover:text-[#0a8387]'
+                  }`}
+                >
+                  {toPurePersianText(group.title)}
                 </div>
-
-                <span className="text-xs sm:text-sm font-bold text-[#12292c] group-hover:text-[#0a8387] whitespace-nowrap leading-tight transition-colors">
-                  {meta.title}
-                </span>
-              </motion.button>
-            );
-          })}
-        </div>
+                <p
+                  className={`text-[11px] leading-4 line-clamp-1 font-medium ${
+                    isSelected ? 'text-white/80' : 'text-[#627d81]'
+                  }`}
+                >
+                  {toPurePersianText(group.subtitle)}
+                </p>
+              </div>
+            </motion.button>
+          );
+        })}
       </div>
     </motion.section>
   );

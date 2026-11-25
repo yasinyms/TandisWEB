@@ -25,9 +25,12 @@ export const ShaparakGatewayModal: React.FC<{
   dark: boolean;
   amountToman: number;
   title: string;
+  phone?: string;
+  customerName?: string;
+  paymentMeta?: Record<string, unknown> | null;
   onCancel: () => void;
   onSuccess: () => Promise<void>;
-}> = ({ open, dark, amountToman, title, onCancel, onSuccess }) => {
+}> = ({ open, dark, amountToman, title, phone, customerName, paymentMeta, onCancel, onSuccess }) => {
   const [cardNumber, setCardNumber] = useState('');
   const [cvv2, setCvv2] = useState('');
   const [expMonth, setExpMonth] = useState('');
@@ -36,11 +39,17 @@ export const ShaparakGatewayModal: React.FC<{
   const [otpRequested, setOtpRequested] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(600);
   const [paying, setPaying] = useState(false);
+  const [zarinpalConfigured, setZarinpalConfigured] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setSecondsLeft(600);
+    setErrorMsg(null);
+    fetch('/api/tandis/payment/zarinpal/status')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setZarinpalConfigured(Boolean(d?.configured)))
+      .catch(() => setZarinpalConfigured(false));
     const t = window.setInterval(() => {
       setSecondsLeft((s) => (s > 0 ? s - 1 : 0));
     }, 1000);
@@ -60,6 +69,34 @@ export const ShaparakGatewayModal: React.FC<{
 
   const mins = Math.floor(secondsLeft / 60);
   const secs = secondsLeft % 60;
+
+  const handleZarinpalRedirect = async () => {
+    setPaying(true);
+    setErrorMsg(null);
+    try {
+      const resp = await fetch('/api/tandis/payment/zarinpal/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amountToman,
+          title,
+          phone: phone || '',
+          customerName: customerName || 'مشتری تندیس',
+          meta: paymentMeta || null
+        })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok && data?.gatewayUrl) {
+        window.location.assign(String(data.gatewayUrl));
+        return;
+      }
+      setErrorMsg(String(data?.message || 'خطا در اتصال به درگاه زرین‌پال'));
+    } catch {
+      setErrorMsg('خطا در اتصال به درگاه زرین‌پال');
+    } finally {
+      setPaying(false);
+    }
+  };
 
   const handlePay = async () => {
     if (cleanCard.length !== 16) {
@@ -128,99 +165,127 @@ export const ShaparakGatewayModal: React.FC<{
             </div>
           )}
 
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs font-extrabold">
-              <span>شماره کارت ۱۶ رقمی</span>
-              {detectedBank && (
-                <span className="font-black" style={{ color: detectedBank.accent }}>
-                  {detectedBank.name}
-                </span>
-              )}
+          {zarinpalConfigured && paymentMeta ? (
+            <div className="space-y-3 pt-1">
+              <div className="rounded-2xl border border-[#10B981]/30 bg-[#10B981]/10 p-4 text-xs leading-6">
+                درگاه پرداخت شاپرکی زرین‌پال فعال است. با کلیک روی دکمه زیر به صفحه امن بانک هدایت می‌شوید.
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  disabled={paying}
+                  onClick={handleZarinpalRedirect}
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-[#065A52] hover:bg-[#054943] disabled:opacity-50 text-white py-3.5 text-sm font-extrabold cursor-pointer"
+                >
+                  <Lock className="w-4 h-4" />
+                  {paying ? 'در حال انتقال...' : 'انتقال به درگاه زرین‌پال'}
+                </button>
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="rounded-2xl border border-[#CBD5E1] dark:border-[#26384E] py-3.5 text-sm font-bold cursor-pointer"
+                >
+                  انصراف
+                </button>
+              </div>
             </div>
-            <div className="relative">
-              <CreditCard className="w-4 h-4 absolute right-3.5 top-3.5 opacity-55" />
-              <input
-                type="tel"
-                value={toPersianDigits(formattedCard)}
-                onChange={(e) => setCardNumber(e.target.value)}
-                placeholder="۶۰۳۷ - ۹۹۷۵ - .... - ...."
-                className={`w-full rounded-2xl border pr-10 pl-4 py-3 text-center text-sm font-black outline-none tabular-nums ${inputCls}`}
-              />
-            </div>
-          </div>
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-extrabold">
+                  <span>شماره کارت ۱۶ رقمی</span>
+                  {detectedBank && (
+                    <span className="font-black" style={{ color: detectedBank.accent }}>
+                      {detectedBank.name}
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <CreditCard className="w-4 h-4 absolute right-3.5 top-3.5 opacity-55" />
+                  <input
+                    type="tel"
+                    value={toPersianDigits(formattedCard)}
+                    onChange={(e) => setCardNumber(e.target.value)}
+                    placeholder="۶۰۳۷ - ۹۹۷۵ - .... - ...."
+                    className={`w-full rounded-2xl border pr-10 pl-4 py-3 text-center text-sm font-black outline-none tabular-nums ${inputCls}`}
+                  />
+                </div>
+              </div>
 
-          <div className="grid grid-cols-3 gap-2.5">
-            <div className="space-y-1">
-              <label className="text-[11px] font-extrabold">کد امنیتی کارت</label>
-              <input
-                type="password"
-                maxLength={4}
-                value={cvv2}
-                onChange={(e) => setCvv2(e.target.value)}
-                placeholder="۳ یا ۴ رقم"
-                className={`w-full rounded-2xl border px-3 py-2.5 text-center text-sm outline-none tabular-nums ${inputCls}`}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-extrabold">ماه انقضا</label>
-              <input
-                type="tel"
-                maxLength={2}
-                value={expMonth}
-                onChange={(e) => setExpMonth(e.target.value)}
-                placeholder="۰۸"
-                className={`w-full rounded-2xl border px-3 py-2.5 text-center text-sm outline-none tabular-nums ${inputCls}`}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-extrabold">سال انقضا</label>
-              <input
-                type="tel"
-                maxLength={2}
-                value={expYear}
-                onChange={(e) => setExpYear(e.target.value)}
-                placeholder="۰۷"
-                className={`w-full rounded-2xl border px-3 py-2.5 text-center text-sm outline-none tabular-nums ${inputCls}`}
-              />
-            </div>
-          </div>
+              <div className="grid grid-cols-3 gap-2.5">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-extrabold">کد امنیتی کارت</label>
+                  <input
+                    type="password"
+                    maxLength={4}
+                    value={cvv2}
+                    onChange={(e) => setCvv2(e.target.value)}
+                    placeholder="۳ یا ۴ رقم"
+                    className={`w-full rounded-2xl border px-3 py-2.5 text-center text-sm outline-none tabular-nums ${inputCls}`}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-extrabold">ماه انقضا</label>
+                  <input
+                    type="tel"
+                    maxLength={2}
+                    value={expMonth}
+                    onChange={(e) => setExpMonth(e.target.value)}
+                    placeholder="۰۸"
+                    className={`w-full rounded-2xl border px-3 py-2.5 text-center text-sm outline-none tabular-nums ${inputCls}`}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-extrabold">سال انقضا</label>
+                  <input
+                    type="tel"
+                    maxLength={2}
+                    value={expYear}
+                    onChange={(e) => setExpYear(e.target.value)}
+                    placeholder="۰۷"
+                    className={`w-full rounded-2xl border px-3 py-2.5 text-center text-sm outline-none tabular-nums ${inputCls}`}
+                  />
+                </div>
+              </div>
 
-          <div className="flex gap-2">
-            <input
-              type="password"
-              maxLength={8}
-              value={pin2}
-              onChange={(e) => setPin2(e.target.value)}
-              placeholder="رمز دوم / رمز پویا"
-              className={`flex-1 rounded-2xl border px-4 py-3 text-sm outline-none tabular-nums ${inputCls}`}
-            />
-            <button
-              type="button"
-              onClick={() => setOtpRequested(true)}
-              className="rounded-2xl border border-[#065A52] text-[#065A52] dark:text-[#14B8A6] px-4 py-3 text-xs font-extrabold whitespace-nowrap cursor-pointer"
-            >
-              {otpRequested ? 'رمز پویا ارسال شد' : 'درخواست رمز پویا'}
-            </button>
-          </div>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  maxLength={8}
+                  value={pin2}
+                  onChange={(e) => setPin2(e.target.value)}
+                  placeholder="رمز دوم / رمز پویا"
+                  className={`flex-1 rounded-2xl border px-4 py-3 text-sm outline-none tabular-nums ${inputCls}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setOtpRequested(true)}
+                  className="rounded-2xl border border-[#065A52] text-[#065A52] dark:text-[#14B8A6] px-4 py-3 text-xs font-extrabold whitespace-nowrap cursor-pointer"
+                >
+                  {otpRequested ? 'رمز پویا ارسال شد' : 'درخواست رمز پویا'}
+                </button>
+              </div>
 
-          <div className="grid grid-cols-2 gap-3 pt-2">
-            <button
-              type="button"
-              disabled={paying}
-              onClick={handlePay}
-              className="flex items-center justify-center gap-2 rounded-2xl bg-[#065A52] hover:bg-[#054943] disabled:opacity-50 text-white py-3.5 text-sm font-extrabold cursor-pointer"
-            >
-              <Lock className="w-4 h-4" />
-              {paying ? 'در حال تایید پرداخت...' : 'پرداخت آنلاین'}
-            </button>
-            <button
-              type="button"
-              onClick={onCancel}
-              className="rounded-2xl border border-[#CBD5E1] dark:border-[#26384E] py-3.5 text-sm font-bold cursor-pointer"
-            >
-              انصراف
-            </button>
-          </div>
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={paying}
+                  onClick={handlePay}
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-[#065A52] hover:bg-[#054943] disabled:opacity-50 text-white py-3.5 text-sm font-extrabold cursor-pointer"
+                >
+                  <Lock className="w-4 h-4" />
+                  {paying ? 'در حال تایید پرداخت...' : 'پرداخت آنلاین'}
+                </button>
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="rounded-2xl border border-[#CBD5E1] dark:border-[#26384E] py-3.5 text-sm font-bold cursor-pointer"
+                >
+                  انصراف
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -307,7 +372,12 @@ export const InvoiceDetailModal: React.FC<{
   customerName: string;
   walletBalance: number;
   onClose: () => void;
-  onRequestShaparak: (amountToman: number, title: string, onSuccess: () => Promise<void>) => void;
+  onRequestShaparak: (
+    amountToman: number,
+    title: string,
+    onSuccess: () => Promise<void>,
+    paymentMeta?: Record<string, unknown>
+  ) => void;
   onRequestCancel: (req: ServiceRequestItem) => void;
   onPaid: (msg: string) => void;
 }> = ({
@@ -349,16 +419,28 @@ export const InvoiceDetailModal: React.FC<{
   };
 
   const handleGatewayPay = () => {
-    onRequestShaparak(request.price_toman, `پرداخت فاکتور: ${request.service_title}`, async () => {
-      await payRequestInvoice({
-        request,
+    onRequestShaparak(
+      request.price_toman,
+      `پرداخت فاکتور: ${request.service_title}`,
+      async () => {
+        await payRequestInvoice({
+          request,
+          phone,
+          customerName: customerName || 'مشتری تندیس',
+          methodLabel: 'درگاه آنلاین شاپرک'
+        });
+        onPaid('پرداخت آنلاین فاکتور با موفقیت انجام و در سرور مرکزی ثبت شد.');
+        onClose();
+      },
+      {
+        kind: 'invoice',
         phone,
         customerName: customerName || 'مشتری تندیس',
-        methodLabel: 'درگاه آنلاین شاپرک'
-      });
-      onPaid('پرداخت آنلاین فاکتور با موفقیت انجام و در سرور مرکزی ثبت شد.');
-      onClose();
-    });
+        requestId: request.id,
+        specialistId: request.assigned_specialist_id || 'spec_101',
+        specialistName: request.assigned_specialist_name || 'متخصص تندیس'
+      }
+    );
   };
 
   return (
@@ -423,14 +505,19 @@ export const InvoiceDetailModal: React.FC<{
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E2EFEF] dark:divide-[#26384E]">
-                  {items.map((it, idx) => (
-                    <tr key={idx}>
-                      <td className="p-3 font-bold">{it.title}</td>
-                      <td className="p-3 tabular-nums">{toPersianDigits(it.quantity)}</td>
-                      <td className="p-3 tabular-nums">{formatToman(it.unit_price_toman)}</td>
-                      <td className="p-3 font-black tabular-nums">{formatToman(it.row_total_toman)}</td>
-                    </tr>
-                  ))}
+                  {items.map((it, idx) => {
+                    const qty = it.quantity ?? 1;
+                    const unitPrice = it.unit_price_toman ?? it.price_toman ?? it.amount_toman ?? 0;
+                    const rowTotal = it.row_total_toman ?? it.amount_toman ?? it.price_toman ?? qty * unitPrice;
+                    return (
+                      <tr key={idx}>
+                        <td className="p-3 font-bold">{it.title}</td>
+                        <td className="p-3 tabular-nums">{toPersianDigits(qty)}</td>
+                        <td className="p-3 tabular-nums">{formatToman(unitPrice)}</td>
+                        <td className="p-3 font-black tabular-nums">{formatToman(rowTotal)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

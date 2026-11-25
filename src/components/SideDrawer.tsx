@@ -1,260 +1,322 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X,
-  User,
   Home,
-  Handshake,
-  Headphones,
-  LogOut,
-  LogIn,
-  ChevronLeft,
   Wrench,
-  PhoneCall,
-  ShieldCheck,
   ShoppingBag,
-  Wallet,
-  ReceiptText,
-  Download,
   Info,
-  MapPin,
+  PhoneCall,
+  Briefcase,
+  UserCheck,
+  ChevronLeft,
+  ShieldCheck,
+  Wallet,
+  ClipboardList,
+  Sparkles,
+  Download,
+  UserPlus,
+  LogOut,
+  Edit3,
+  Users,
+  Newspaper,
+  Bell
 } from 'lucide-react';
-import { formatToman, toPersianDigits } from '../services/tandisDefaults';
+import { toPersianDigits } from '../services/tandisDefaults';
 
 const CUSTOMER_LOGO_SRC = '/assets/aistudio/WhatsApp_Image_2026-11-15_at_17.37.57_b48837a8.jpeg';
 
 interface SideDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  activeNav?: string;
-  currentCity?: string;
-  walletBalance?: number;
-  supportPhone?: string;
-  onSelectNav?: (nav: string) => void;
-  onSelectCategory?: (catId: string) => void;
-  onOpenCityModal?: () => void;
+  activeNav: string;
+  onNavClick: (nav: string) => void;
+  onOpenAuth: () => void;
   onOpenSupport?: () => void;
-  user?: {
-    isLoggedIn: boolean;
-    phone?: string;
-    name?: string;
-    firstName?: string;
-    lastName?: string;
-    role?: string;
-  } | null;
-  onOpenAuth?: () => void;
+  onOpenEditName?: () => void;
+  onOpenNotifications?: () => void;
+  unreadNotificationsCount?: number;
   onLogout?: () => void;
+  selectedCity: string;
+  customerPhone?: string;
+  customerName?: string;
+  supportPhone?: string;
 }
 
 export const SideDrawer: React.FC<SideDrawerProps> = ({
   isOpen,
   onClose,
-  activeNav = 'home',
-  currentCity = 'آبادان',
-  walletBalance = 0,
-  supportPhone = '061-53220000',
-  onSelectNav,
-  onOpenCityModal,
-  onOpenSupport,
-  user,
+  activeNav,
+  onNavClick,
   onOpenAuth,
+  onOpenSupport,
+  onOpenEditName,
+  onOpenNotifications,
+  unreadNotificationsCount = 0,
   onLogout,
+  selectedCity,
+  customerPhone,
+  customerName,
+  supportPhone = '09307327975'
 }) => {
-  const fullName =
-    user?.name?.trim() ||
-    `${user?.firstName || ''} ${user?.lastName || ''}`.trim() ||
-    'کاربر تندیس';
+  const [logoFailed, setLogoFailed] = useState(false);
 
-  const navItems = [
-    { id: 'home', label: 'خانه', icon: Home },
-    { id: 'services', label: 'خدمات در محل', icon: Wrench },
-    { id: 'store', label: 'فروشگاه قطعات', icon: ShoppingBag },
-    { id: 'tandispay', label: 'تندیس‌پی', icon: Wallet },
-    { id: 'orders', label: 'درخواست‌ها', icon: ReceiptText },
-    { id: 'downloads', label: 'دانلود اپلیکیشن', icon: Download },
-    { id: 'hamkar-panel', label: 'پنل تندیس همکار (ورود)', icon: ShieldCheck },
-    { id: 'provider-signup', label: 'ثبت‌نام متخصص جدید', icon: Handshake },
-    { id: 'about', label: 'درباره ما', icon: Info },
+  const menuLinks = [
+    { id: 'home', label: 'صفحه اصلی تندیس', icon: Home, badge: '' },
+    { id: 'services', label: 'خدمات تخصصی در محل', icon: Wrench, badge: '۳۲ خدمت' },
+    { id: 'beauty', label: 'زیبایی بانوان و نوبت‌دهی', icon: Sparkles, badge: 'رزرو آنلاین' },
+    { id: 'store', label: 'فروشگاه آنلاین قطعات', icon: ShoppingBag, badge: 'ضمانت اصالت' },
+    { id: 'tandispay', label: 'کیف پول و اعتبار تندیس‌پی', icon: Wallet, badge: 'تا ۳۰۰ میلیون' },
+    { id: 'orders', label: 'پیگیری درخواست‌ها و فاکتور', icon: ClipboardList, badge: '' },
+    { id: 'management', label: 'مدیریت و کارشناسان', icon: Users, badge: 'تیم تندیس' },
+    { id: 'news', label: 'اخبار و مقالات', icon: Newspaper, badge: 'به‌زودی' },
+    { id: 'downloads', label: 'دانلود اپلیکیشن موبایل', icon: Download, badge: 'اندروید' },
+    { id: 'about', label: 'درباره تندیس و قوانین', icon: Info, badge: 'اینماد' }
   ];
+
+  const isLoggedIn = Boolean(customerPhone && /^09\d{9}$/.test(customerPhone));
+
+  const handleSelect = (id: string) => {
+    onNavClick(id);
+    onClose();
+  };
 
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 no-print">
+        <div className="fixed inset-0 z-50 flex">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             onClick={onClose}
-            className="fixed inset-0 bg-[#12292c]/40 backdrop-blur-xs cursor-pointer"
-            aria-hidden="true"
+            className="fixed inset-0 bg-[#071e20]/60 backdrop-blur-sm"
           />
 
           <motion.aside
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 320 }}
-            className="fixed top-0 right-0 z-10 h-full w-[310px] max-w-[85vw] bg-white shadow-[0_20px_50px_rgba(11,92,96,0.18)] flex flex-col border-l border-[#e2efef] text-right select-none"
-            dir="rtl"
+            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+            className="relative z-10 w-[85vw] max-w-sm bg-white h-full shadow-2xl border-l border-[#d8ecec] flex flex-col justify-between overflow-y-auto"
           >
-            {/* Header */}
-            <div className="h-16 px-4 flex items-center justify-between border-b border-[#eef4f5] shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-white border border-[#dfecec] flex items-center justify-center shrink-0 overflow-hidden p-1">
-                  <img
-                    src={CUSTOMER_LOGO_SRC}
-                    alt="تندیس"
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-contain rounded-lg"
-                  />
-                </div>
-                <span className="font-black text-base text-[#12292c]">تندیس</span>
-              </div>
-
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="بستن منو"
-                className="w-8 h-8 rounded-xl bg-[#f4fafa] text-[#5f777b] hover:text-[#12292c] flex items-center justify-center transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto px-3.5 py-3.5 space-y-3.5 no-scrollbar">
-              {/* Account & City */}
-              <div className="rounded-2xl bg-[#f4fafa] border border-[#e0efef] p-3 space-y-2.5">
-                {user?.isLoggedIn ? (
-                  <>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-9 h-9 rounded-xl bg-[#0b5c60] text-white flex items-center justify-center shrink-0">
-                          <User className="w-4 h-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-black text-[#12292c] truncate">{fullName}</p>
-                          <p dir="ltr" className="text-[11px] text-[#5f777b] text-right tabular-nums">
-                            {user.phone ? toPersianDigits(user.phone) : ''}
-                          </p>
-                        </div>
+            <div>
+              <div className="p-5 bg-gradient-to-br from-[#0b5c60] via-[#0a8387] to-[#064245] text-white relative overflow-hidden">
+                <div className="absolute -left-10 -bottom-10 w-36 h-36 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-white p-0.5 flex items-center justify-center border border-white/40 shadow-lg overflow-hidden shrink-0">
+                      {!logoFailed ? (
+                        <img
+                          src={CUSTOMER_LOGO_SRC}
+                          alt="لوگوی تندیس"
+                          referrerPolicy="no-referrer"
+                          onError={() => setLogoFailed(true)}
+                          className="w-full h-full object-contain rounded-xl"
+                        />
+                      ) : (
+                        <span className="text-2xl font-black text-[#0b5c60]">ت</span>
+                      )}
+                    </div>
+                    <div>
+                      <div className="font-black text-lg leading-tight">سوپر اپلیکیشن تندیس</div>
+                      <div className="text-xs text-[#c5ecea] font-medium mt-0.5">
+                        شهر فعال: {selectedCity}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onLogout?.();
-                          onClose();
-                        }}
-                        className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer shrink-0"
-                      >
-                        <LogOut className="w-3.5 h-3.5" />
-                        <span>خروج</span>
-                      </button>
                     </div>
-                    <div className="flex items-center justify-between pt-2 border-t border-[#dcecec] text-xs">
-                      <span className="text-[#5f777b]">کیف پول</span>
-                      <span className="font-black text-[#0b5c60] tabular-nums">
-                        {formatToman(walletBalance)}
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-[#12292c]">حساب کاربری</span>
+                  </div>
+                  <button
+                    onClick={onClose}
+                    className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors cursor-pointer"
+                    aria-label="بستن منو"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 bg-black/20 backdrop-blur-md px-3.5 py-2.5 rounded-xl border border-white/15 text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <ShieldCheck className="w-4 h-4 text-[#f2a900] shrink-0" />
+                    <span className="font-medium text-white/95 truncate">
+                      {isLoggedIn
+                        ? `${customerName || 'مشتری تندیس'} (${toPersianDigits(customerPhone || '')})`
+                        : 'پشتیبانی و ضمانت رسمی خدمات'}
+                    </span>
+                  </div>
+                  {isLoggedIn && onOpenEditName && (
                     <button
                       type="button"
                       onClick={() => {
                         onClose();
-                        onOpenAuth?.();
+                        onOpenEditName();
                       }}
-                      className="px-3.5 py-1.5 rounded-xl bg-[#0b5c60] hover:bg-[#0a8387] text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[11px] font-bold shrink-0 cursor-pointer"
                     >
-                      <LogIn className="w-3.5 h-3.5" />
-                      <span>ورود</span>
+                      <Edit3 className="w-3 h-3" />
+                      ویرایش نام
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-4 border-b border-[#e5f2f2] space-y-2.5">
+                {isLoggedIn ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {onOpenEditName && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          onOpenEditName();
+                        }}
+                        className="py-2.5 px-3 rounded-xl bg-[#effcfb] hover:bg-[#dff6f5] text-[#0b5c60] border border-[#bce6e4] font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>تغییر نام کاربری</span>
+                      </button>
+                    )}
+                    {onLogout && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          onLogout();
+                        }}
+                        className="py-2.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>خروج از حساب</span>
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => {
+                        onClose();
+                        onOpenAuth();
+                      }}
+                      className="py-3 px-3 rounded-2xl bg-[#f2f9f9] hover:bg-[#e3f3f3] text-[#0b5c60] border border-[#cde6e6] font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <UserCheck className="w-4 h-4 text-[#0a8387]" />
+                      <span>ورود پیامکی</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleSelect('customer-signup')}
+                      className="py-3 px-3 rounded-2xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <UserPlus className="w-4 h-4 text-amber-600" />
+                      <span>ثبت‌نام مشتری</span>
                     </button>
                   </div>
                 )}
 
-                {onOpenCityModal && (
+                {isLoggedIn && onOpenNotifications && (
                   <button
                     type="button"
                     onClick={() => {
                       onClose();
-                      onOpenCityModal();
+                      onOpenNotifications();
                     }}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-white hover:bg-[#eff8f8] border border-[#dcecec] text-xs font-bold text-[#12292c] transition-colors cursor-pointer"
+                    className="w-full py-2.5 px-4 rounded-xl bg-[#f8fcfc] hover:bg-[#effcfb] text-[#12292c] border border-[#dcecec] font-bold text-xs flex items-center justify-between transition-all cursor-pointer"
                   >
-                    <span className="flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-[#0b5c60]" />
-                      {currentCity}
+                    <span className="flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-[#0a8387]" />
+                      صندوق اعلان‌ها و پیام‌های مدیریت
                     </span>
-                    <span className="text-[11px] text-[#0a8387]">تغییر</span>
+                    {unreadNotificationsCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black">
+                        {toPersianDigits(unreadNotificationsCount)} جدید
+                      </span>
+                    )}
                   </button>
                 )}
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    onClick={() => handleSelect('provider-signup')}
+                    className="py-2.5 px-3 rounded-xl bg-[#0a8387] hover:bg-[#0b5c60] text-white font-bold text-xs flex flex-col items-center justify-center gap-1 shadow-sm transition-all cursor-pointer"
+                  >
+                    <Briefcase className="w-4 h-4 text-[#f2a900]" />
+                    <span>ثبت‌نام همکار</span>
+                  </button>
+                  <button
+                    onClick={() => handleSelect('expert-login')}
+                    className="py-2.5 px-3 rounded-xl bg-[#12292c] hover:bg-[#1c3d42] text-white font-bold text-xs flex flex-col items-center justify-center gap-1 shadow-sm transition-all cursor-pointer"
+                  >
+                    <UserCheck className="w-4 h-4 text-[#2dd4bf]" />
+                    <span>ورود به پنل همکار</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Clean 1-line Nav */}
-              <nav className="space-y-1">
-                {navItems.map((item) => {
+              <div className="p-3 space-y-1">
+                <div className="px-3 py-1.5 text-[11px] font-bold text-[#6c888c]">
+                  دسترسی سریع به بخش‌ها
+                </div>
+                {menuLinks.map((item) => {
                   const Icon = item.icon;
                   const isActive = activeNav === item.id;
-
                   return (
                     <button
                       key={item.id}
-                      type="button"
-                      onClick={() => {
-                        onSelectNav?.(item.id);
-                        onClose();
-                      }}
-                      className={`w-full px-3 py-2.5 rounded-xl flex items-center justify-between transition-colors cursor-pointer ${
+                      onClick={() => handleSelect(item.id)}
+                      className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
                         isActive
-                          ? 'bg-[#eff8f8] text-[#0b5c60] font-extrabold'
-                          : 'bg-white hover:bg-[#f6fbfb] text-[#12292c] font-medium'
+                          ? 'bg-[#effcfb] text-[#0a8387] border border-[#c5ecea]'
+                          : 'text-[#284246] hover:bg-[#f5fbfb]'
                       }`}
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#0b5c60]' : 'text-[#0a8387]'}`} />
-                        <span className="text-xs truncate">{item.label}</span>
+                      <div className="flex items-center gap-3">
+                        <Icon className={`w-4 h-4 ${isActive ? 'text-[#0a8387]' : 'text-[#5b7a7e]'}`} />
+                        <span>{item.label}</span>
                       </div>
-                      <ChevronLeft
-                        className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#0b5c60]' : 'text-[#cbd5e1]'}`}
-                      />
+                      <div className="flex items-center gap-1.5">
+                        {item.badge && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#f2f9f9] text-[#0b5c60] border border-[#d6ebeb]">
+                            {item.badge}
+                          </span>
+                        )}
+                        <ChevronLeft className="w-4 h-4 text-[#8aa4a8]" />
+                      </div>
                     </button>
                   );
                 })}
+              </div>
+            </div>
 
+            <div className="p-4 bg-[#f5fbfb] border-t border-[#e0eeee] space-y-2">
+              {onOpenSupport && (
                 <button
                   type="button"
                   onClick={() => {
                     onClose();
-                    onOpenSupport?.();
+                    onOpenSupport();
                   }}
-                  className="w-full px-3 py-2.5 rounded-xl bg-white hover:bg-[#f6fbfb] flex items-center justify-between text-[#12292c] font-medium transition-colors cursor-pointer"
+                  className="w-full py-2.5 px-4 rounded-xl bg-white border border-[#d6ebeb] text-xs font-extrabold text-[#0b5c60] hover:bg-[#effcfb] transition-colors cursor-pointer"
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <Headphones className="w-4 h-4 text-[#0a8387] shrink-0" />
-                    <span className="text-xs truncate">پشتیبانی ۲۴/۷</span>
-                  </div>
-                  <ChevronLeft className="w-4 h-4 text-[#cbd5e1] shrink-0" />
+                  ارسال تیکت به پشتیبانی برخط
                 </button>
-              </nav>
-            </div>
-
-            {/* Footer */}
-            <div className="p-3.5 border-t border-[#eef4f5] bg-[#fafdfd] shrink-0">
+              )}
               <a
                 href={`tel:${supportPhone.replace(/[^0-9+]/g, '')}`}
-                className="flex items-center justify-between px-1 text-xs text-[#5f777b] hover:text-[#0b5c60] transition-colors"
+                className="flex items-center justify-between p-3 rounded-xl bg-white border border-[#d8ecec] hover:border-[#0a8387] transition-all group"
               >
-                <span className="flex items-center gap-1.5">
-                  <PhoneCall className="w-3.5 h-3.5 text-[#0a8387]" />
-                  <span>پشتیبانی تلفنی</span>
-                </span>
-                <span dir="ltr" className="font-bold text-[#12292c] tabular-nums">
-                  {toPersianDigits(supportPhone)}
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-[#effcfb] text-[#0a8387] flex items-center justify-center">
+                    <PhoneCall className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-extrabold text-[#12292c]">مرکز تماس و پشتیبانی</div>
+                    <div className="text-[11px] text-[#5c787c]" dir="ltr">
+                      {toPersianDigits(supportPhone)}
+                    </div>
+                  </div>
+                </div>
+                <span className="text-[11px] font-bold text-[#0a8387] group-hover:translate-x-[-2px] transition-transform">
+                  تماس
                 </span>
               </a>
             </div>

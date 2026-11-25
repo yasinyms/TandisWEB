@@ -25,7 +25,12 @@ export const TandisPayWalletView: React.FC<{
   walletBalance: number;
   loans: TandisPayLoan[];
   onRequireLogin: () => void;
-  onRequestShaparak: (amountToman: number, title: string, onSuccess: () => Promise<void>) => void;
+  onRequestShaparak: (
+    amountToman: number,
+    title: string,
+    onSuccess: () => Promise<void>,
+    paymentMeta?: Record<string, unknown>
+  ) => void;
   onRefresh: () => void;
   onToast: (msg: string) => void;
 }> = ({
@@ -67,11 +72,21 @@ export const TandisPayWalletView: React.FC<{
       onToast('حداقل مبلغ شارژ ۱۰,۰۰۰ تومان است.');
       return;
     }
-    onRequestShaparak(amountToman, 'افزایش موجودی کیف پول تندیس', async () => {
-      await updateCustomerWallet(phone, customerName || 'مشتری تندیس', walletBalance + amountToman);
-      onToast(`مبلغ ${formatToman(amountToman)} با موفقیت به کیف پول شما افزوده شد.`);
-      onRefresh();
-    });
+    onRequestShaparak(
+      amountToman,
+      'افزایش موجودی کیف پول تندیس',
+      async () => {
+        await updateCustomerWallet(phone, customerName || 'مشتری تندیس', walletBalance + amountToman);
+        onToast(`مبلغ ${formatToman(amountToman)} با موفقیت به کیف پول شما افزوده شد.`);
+        onRefresh();
+      },
+      {
+        kind: 'wallet',
+        phone,
+        customerName: customerName || 'مشتری تندیس',
+        currentBalance: walletBalance
+      }
+    );
   };
 
   const handleDocUpload = async (idx: 0 | 1 | 2, file?: File) => {

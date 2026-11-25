@@ -111,13 +111,15 @@ function isSystemOrNonCustomerRecord(req) {
     id.startsWith('part_inquiry_') ||
     id.startsWith('parts_order_') ||
     id.startsWith('blocked_') ||
+    id.startsWith('notif_') ||
     [
       'SUPPORT_TICKET', 'SPECIALIST_DOCS', 'SYSTEM_CONFIG', 'SYSTEM_SMS_CONFIG', 'SYSTEM_CATEGORIES',
       'SYSTEM_SLIDERS', 'CATEGORY_SLIDERS', 'CUSTOMER_WALLET', 'WALLET',
       'MISSION_SYNC', 'SPECIALIST_PROFILE', 'SPECIALIST_SETTLEMENT',
       'LOAN', 'TANDIS_PAY', 'TANDIS_PAY_LOAN', 'CUSTOMER_PRESENCE', 'SESSION_LOCK',
       'NAME_OVERRIDE', 'BEAUTY_SCHEDULE', 'BEAUTY_SPECIALIST_PROFILE',
-      'BEAUTY_APPOINTMENT', 'PART_INQUIRY', 'PARTS_ORDER'
+      'BEAUTY_APPOINTMENT', 'PART_INQUIRY', 'PARTS_ORDER',
+      'ADMIN_NOTIFICATION', 'SYSTEM_NOTIFICATION', 'BROADCAST_NOTIFICATION'
     ].includes(cat) ||
     reqId === 'SYSTEM_SMS_CONFIG' ||
     model === 'SPECIALIST_DOCS' ||
@@ -693,10 +695,14 @@ app.post('/api/tandis/auth/verify-otp', async (req, res) => {
 app.get('/api/tandis/live-state', async (req, res) => {
   const phone = normalizePhone(req.query.phone || '');
   try {
-    const [reviewsRes, requestsRes, customersRes] = await Promise.all([
+    const [reviewsRes, requestsRes, customersRes, categoriesRes, directSupportRes] = await Promise.all([
       fetchDjangoJson('reviews/').catch(() => ({ ok: false, data: [] })),
       fetchDjangoJson('requests/').catch(() => ({ ok: false, data: [] })),
-      fetchDjangoJson('customers/').catch(() => ({ ok: false, data: [] }))
+      fetchDjangoJson('customers/').catch(() => ({ ok: false, data: [] })),
+      fetchDjangoJson('categories/').catch(() => ({ ok: false, data: [] })),
+      phone
+        ? fetchDjangoJson(`support/tickets/?phone=${encodeURIComponent(phone)}`).catch(() => ({ ok: false, data: [] }))
+        : Promise.resolve({ ok: false, data: [] })
     ]);
 
     const allReviews = Array.isArray(reviewsRes.data) ? reviewsRes.data : [];
@@ -733,7 +739,7 @@ app.get('/api/tandis/live-state', async (req, res) => {
       } catch {}
     }
 
-    // ۳. استخراج دسته‌بندی‌ها و اسلایدرهای پویا
+    // ۳. استخراج دسته‌بندی‌ها و اسلایدرهای پویا (ادغام config_categories و مسیر /categories/)
     let categories = null;
     const catRev = allReviews
       .filter((r) => r.id === 'config_categories' || r.request_id === 'SYSTEM_CATEGORIES')
@@ -743,6 +749,11 @@ app.get('/api/tandis/live-state', async (req, res) => {
       try {
         categories = JSON.parse(catRev.comment);
       } catch {}
+    }
+    if (!Array.isArray(categories) || categories.length === 0) {
+      if (Array.isArray(categoriesRes.data) && categoriesRes.data.length > 0) {
+        categories = categoriesRes.data;
+      }
     }
 
     let sliders = null;
@@ -1024,6 +1035,139 @@ app.get('/api/tandis/live-state', async (req, res) => {
           .reverse()
       : [];
 
+    // ۱۰. اعلان‌های ارسال‌شده از تندیس مدیریت (همگانی و اختصاصی مشتری)
+    const adminNotifications = [];
+    for (const r of sortedReviews) {
+      const rid = String(r.id || '');
+      const reqId = String(r.request_id || '').toUpperCase();
+      if (
+        !rid.startsWith('notif_') &&
+        !['ADMIN_NOTIFICATION', 'SYSTEM_NOTIFICATION', 'BROADCAST_NOTIFICATION'].includes(reqId)
+      ) {
+        continue;
+      }
+      try {
+        const obj = String(r.comment || '').trim().startsWith('{')
+          ? JSON.parse(r.comment)
+          : { message: String(r.comment || '') };
+        const targetPhone = normalizePhone(obj.target_phone || obj.user_phone || r.customer_phone || '');
+        const audience = String(obj.target_audience || obj.audience || 'ALL').toUpperCase();
+        if (audience === 'SPECIALIST' || audience === 'HAMKAR') continue;
+        if (targetPhone && targetPhone !== phone) continue;
+        adminNotifications.push({
+          id: rid || `notif_${r.created_at_epoch || Date.now()}`,
+          title: String(obj.title || r.service_title || 'اطلاعیه مدیریت تندیس'),
+          message: String(obj.message || obj.body || obj.text || ''),
+          type: 'ADMIN',
+          createdAtEpoch: Number(obj.created_at_epoch || r.created_at_epoch || Date.now()),
+          isRead: false,
+          senderRole: 'ADMIN',
+          actionNav: obj.action_nav ? String(obj.action_nav) : undefined
+        });
+      } catch {}
+    }
+    if (otaConfig?.global_announcement_text) {
+      adminNotifications.push({
+        id: `ota_announce_${String(otaConfig.global_announcement_text).slice(0, 24)}`,
+        title: 'اطلاعیه سراسری تندیس',
+        message: String(otaConfig.global_announcement_text),
+        type: 'ADMIN',
+        createdAtEpoch: Number(otaConfig.updated_at_epoch || Date.now() - 60000),
+        isRead: false,
+        senderRole: 'ADMIN'
+      });
+    }
+    adminNotifications.sort((a, b) => b.createdAtEpoch - a.createdAtEpoch);
+
+    // ۱۱. تیکت‌های پشتیبانی یکپارچه مشتری (support/tickets + tkt_req_* + reviews/ticket_*)
+    const mergedCustomerTickets = [];
+    if (phone) {
+      const seenTkt = new Set();
+      const pushTicket = (t) => {
+        const key = String(t.id || t.ticket_id || `${t.subject}_${t.created_at_epoch || ''}`);
+        if (seenTkt.has(key)) return;
+        seenTkt.add(key);
+        mergedCustomerTickets.push(t);
+      };
+      const directList = Array.isArray(directSupportRes?.data) ? directSupportRes.data : [];
+      for (const t of directList) {
+        pushTicket({
+          id: t.id || t.ticket_id,
+          user_phone: t.sender_phone || t.user_phone || phone,
+          user_name: t.sender_name || t.user_name || 'مشتری تندیس',
+          subject: t.subject || 'پشتیبانی',
+          message: t.message || t.initial_message || '',
+          admin_reply: t.admin_reply || null,
+          status: t.admin_reply ? 'RESOLVED' : (t.status || 'OPEN'),
+          messages: Array.isArray(t.messages)
+            ? t.messages
+            : [
+                ...(t.message || t.initial_message ? [{ sender: 'USER', text: t.message || t.initial_message }] : []),
+                ...(t.admin_reply ? [{ sender: 'ADMIN', text: t.admin_reply }] : [])
+              ],
+          created_at_epoch: Number(t.created_at_epoch || Date.now())
+        });
+      }
+      for (const r of allRequests) {
+        const rid = String(r.id || '');
+        const cat = String(r.service_category_id || '').toLowerCase();
+        if ((rid.startsWith('tkt_req_') || rid.startsWith('ticket_') || cat === 'support_ticket') && normalizePhone(r.customer_phone) === phone) {
+          pushTicket({
+            id: rid,
+            user_phone: phone,
+            user_name: r.customer_name || 'مشتری تندیس',
+            subject: r.service_title || 'پشتیبانی وب‌سایت',
+            message: r.issue_description || '',
+            admin_reply: r.customer_review_comment || null,
+            status: r.customer_review_comment ? 'RESOLVED' : 'OPEN',
+            messages: [
+              ...(r.issue_description ? [{ sender: 'USER', text: r.issue_description }] : []),
+              ...(r.customer_review_comment ? [{ sender: 'ADMIN', text: r.customer_review_comment }] : [])
+            ],
+            created_at_epoch: Number(r.created_at_epoch || Date.now())
+          });
+        }
+      }
+      for (const r of sortedReviews) {
+        const rid = String(r.id || '');
+        if ((rid.startsWith('ticket_') || rid.startsWith('tkt_')) && normalizePhone(r.customer_phone) === phone) {
+          try {
+            const obj = JSON.parse(r.comment || '{}');
+            pushTicket({
+              id: rid,
+              user_phone: phone,
+              user_name: obj.user_name || r.customer_name || 'مشتری تندیس',
+              subject: obj.subject || r.service_title || 'پشتیبانی',
+              message: obj.message || '',
+              admin_reply: obj.admin_reply || null,
+              status: obj.admin_reply ? 'RESOLVED' : (obj.status || 'OPEN'),
+              messages: [
+                ...(obj.message ? [{ sender: 'USER', text: obj.message }] : []),
+                ...(obj.admin_reply ? [{ sender: 'ADMIN', text: obj.admin_reply }] : [])
+              ],
+              created_at_epoch: Number(obj.created_at_epoch || r.created_at_epoch || Date.now())
+            });
+          } catch {}
+        }
+      }
+      mergedCustomerTickets.sort((a, b) => Number(b.created_at_epoch || 0) - Number(a.created_at_epoch || 0));
+    }
+
+    // ۱۲. فهرست عمومی کارشناسان رسمی تاییدشده برای صفحه «مدیریت و کارشناسان» (بدون افشای شماره تماس خصوصی)
+    const officialSpecialists = allCustomers
+      .filter((c) => String(c.phone || '').toLowerCase().startsWith('hamkar_'))
+      .map((c) => parseHamkarCustomerRecord(c))
+      .filter((s) => s && s.approvalStatus === 'APPROVED')
+      .slice(0, 24)
+      .map((s) => ({
+        fullName: s.fullName,
+        roleTitle: s.roleTitle || 'کارشناس رسمی تندیس',
+        categoryGroup: s.categoryGroup || 'خدمات تخصصی تندیس',
+        businessName: s.businessName || 'کارشناس تاییدشده تندیس',
+        serviceCity: s.serviceCity || 'سراسر ایران',
+        profilePhoto: s.profilePhoto || avatarByPhone.get(s.phone) || null
+      }));
+
     res.json({
       online: reviewsRes.ok || requestsRes.ok,
       syncedAtEpoch: Date.now(),
@@ -1038,10 +1182,216 @@ app.get('/api/tandis/live-state', async (req, res) => {
       beautySpecialists,
       beautyAppointments,
       customerLoans,
-      partInquiries
+      partInquiries,
+      tickets: mergedCustomerTickets,
+      notifications: adminNotifications,
+      officialSpecialists
     });
   } catch (err) {
     res.status(500).json({ online: false, error: String(err?.message || err) });
+  }
+});
+
+// مسیر یکپارچه ارسال و دریافت تیکت پشتیبانی مشتری (تحویل تضمینی به نرم‌افزار تندیس مدیریت)
+app.post('/api/tandis/tickets', async (req, res) => {
+  const phone = normalizePhone(req.body?.user_phone || req.body?.sender_phone || '');
+  const fullName = String(req.body?.user_name || req.body?.sender_name || 'مشتری تندیس').trim().slice(0, 120);
+  const subject = String(req.body?.subject || '').trim().slice(0, 160);
+  const message = String(req.body?.message || req.body?.initial_message || '').trim().slice(0, 2000);
+
+  if (!phone || !subject || !message) {
+    return res.status(400).json({ ok: false, message: 'شماره تماس، موضوع و متن پیام الزامی است.' });
+  }
+
+  const now = Date.now();
+  const suffix = crypto.randomBytes(4).toString('hex');
+  const ticketId = `tkt_${suffix}`;
+  const reqMirrorId = `tkt_req_${suffix}`;
+
+  try {
+    const [supportRes, legacyRes] = await Promise.all([
+      fetchDjangoJson('support/tickets/', {
+        method: 'POST',
+        body: JSON.stringify({
+          id: ticketId,
+          sender_phone: phone,
+          sender_name: fullName,
+          sender_role: 'CUSTOMER',
+          subject,
+          message,
+          status: 'OPEN'
+        })
+      }).catch(() => ({ ok: false })),
+      fetchDjangoJson('tickets/', {
+        method: 'POST',
+        body: JSON.stringify({
+          user_phone: phone,
+          user_name: fullName,
+          subject,
+          category: 'پشتیبانی وب‌سایت تندیس',
+          priority: 'HIGH',
+          initial_message: message
+        })
+      }).catch(() => ({ ok: false }))
+    ]);
+
+    // ثبت آینه تضمینی در requests (tkt_req_*) و reviews (ticket_*) جهت دیده‌شدن فوری در تندیس مدیریت
+    await Promise.all([
+      fetchDjangoJson('requests/', {
+        method: 'POST',
+        body: JSON.stringify({
+          id: reqMirrorId,
+          service_category_id: 'support_ticket',
+          service_title: `[پشتیبانی سایت] ${subject}`,
+          customer_name: fullName,
+          customer_phone: phone,
+          car_model: 'پشتیبانی وب‌سایت تندیس',
+          issue_description: message,
+          neighborhood: 'پشتیبانی برخط',
+          home_address: 'وب‌سایت تندیس',
+          city: 'مرکزی',
+          price_toman: 0,
+          is_urgent: true,
+          status: 'PENDING_NEARBY',
+          created_at_epoch: now,
+          synced_with_django: true
+        })
+      }).catch(() => ({ ok: false })),
+      fetchDjangoJson('reviews/', {
+        method: 'POST',
+        body: JSON.stringify({
+          id: `ticket_${suffix}`,
+          request_id: 'SUPPORT_TICKET',
+          service_title: subject,
+          specialist_id: 'admin_support',
+          specialist_name: 'پشتیبانی مدیریت تندیس',
+          customer_name: fullName,
+          customer_phone: phone,
+          stars: 5,
+          quality_tags: 'SUPPORT_TICKET|ROLE:CUSTOMER|STATUS:OPEN',
+          comment: JSON.stringify({
+            id: ticketId,
+            user_phone: phone,
+            user_name: fullName,
+            sender_role: 'CUSTOMER',
+            subject,
+            message,
+            status: 'OPEN',
+            created_at_epoch: now
+          }),
+          created_at_epoch: now,
+          synced_with_django: true
+        })
+      }).catch(() => ({ ok: false }))
+    ]);
+
+    return res.json({
+      ok: true,
+      id: ticketId,
+      user_phone: phone,
+      user_name: fullName,
+      subject,
+      message,
+      status: 'OPEN',
+      messages: [{ sender: 'USER', text: message }],
+      created_at_epoch: now,
+      delivered_primary: Boolean(supportRes.ok || legacyRes.ok)
+    });
+  } catch (err) {
+    return res.status(502).json({ ok: false, message: 'خطا در ثبت پیام پشتیبانی در سرور مرکزی.' });
+  }
+});
+
+app.get('/api/tandis/tickets', async (req, res) => {
+  const phone = normalizePhone(req.query.phone || req.query.user_phone || '');
+  if (!phone) return res.json([]);
+  try {
+    const [supportRes, legacyRes, reqsRes, revsRes] = await Promise.all([
+      fetchDjangoJson(`support/tickets/?phone=${encodeURIComponent(phone)}`).catch(() => ({ ok: false, data: [] })),
+      fetchDjangoJson(`tickets/?user_phone=${encodeURIComponent(phone)}`).catch(() => ({ ok: false, data: [] })),
+      fetchDjangoJson('requests/').catch(() => ({ ok: false, data: [] })),
+      fetchDjangoJson('reviews/').catch(() => ({ ok: false, data: [] }))
+    ]);
+
+    const seen = new Set();
+    const out = [];
+    const add = (item) => {
+      const k = String(item.id || item.ticket_id || `${item.subject}_${item.message}`);
+      if (seen.has(k)) return;
+      seen.add(k);
+      out.push(item);
+    };
+
+    for (const src of [supportRes.data, legacyRes.data]) {
+      if (!Array.isArray(src)) continue;
+      for (const t of src) {
+        const msg = t.message || t.initial_message || (Array.isArray(t.messages) && t.messages[0]?.text) || '';
+        const reply = t.admin_reply || null;
+        add({
+          id: t.id || t.ticket_id,
+          user_phone: t.sender_phone || t.user_phone || phone,
+          user_name: t.sender_name || t.user_name || 'مشتری تندیس',
+          subject: t.subject || 'پشتیبانی',
+          message: msg,
+          admin_reply: reply,
+          status: reply ? 'RESOLVED' : (t.status || 'OPEN'),
+          messages: Array.isArray(t.messages) && t.messages.length > 0
+            ? t.messages
+            : [...(msg ? [{ sender: 'USER', text: msg }] : []), ...(reply ? [{ sender: 'ADMIN', text: reply }] : [])],
+          created_at_epoch: Number(t.created_at_epoch || Date.now())
+        });
+      }
+    }
+
+    const reqList = Array.isArray(reqsRes.data) ? reqsRes.data : [];
+    for (const r of reqList) {
+      const rid = String(r.id || '');
+      if ((rid.startsWith('tkt_req_') || String(r.service_category_id || '') === 'support_ticket') && normalizePhone(r.customer_phone) === phone) {
+        add({
+          id: rid,
+          user_phone: phone,
+          user_name: r.customer_name || 'مشتری تندیس',
+          subject: String(r.service_title || 'پشتیبانی').replace(/^\[پشتیبانی سایت\]\s*/, ''),
+          message: r.issue_description || '',
+          admin_reply: r.customer_review_comment || null,
+          status: r.customer_review_comment ? 'RESOLVED' : 'OPEN',
+          messages: [
+            ...(r.issue_description ? [{ sender: 'USER', text: r.issue_description }] : []),
+            ...(r.customer_review_comment ? [{ sender: 'ADMIN', text: r.customer_review_comment }] : [])
+          ],
+          created_at_epoch: Number(r.created_at_epoch || Date.now())
+        });
+      }
+    }
+
+    const revList = Array.isArray(revsRes.data) ? revsRes.data : [];
+    for (const r of revList) {
+      const rid = String(r.id || '');
+      if ((rid.startsWith('ticket_') || rid.startsWith('tkt_')) && normalizePhone(r.customer_phone) === phone) {
+        try {
+          const obj = JSON.parse(r.comment || '{}');
+          add({
+            id: obj.id || rid,
+            user_phone: phone,
+            user_name: obj.user_name || r.customer_name || 'مشتری تندیس',
+            subject: obj.subject || r.service_title || 'پشتیبانی',
+            message: obj.message || '',
+            admin_reply: obj.admin_reply || null,
+            status: obj.admin_reply ? 'RESOLVED' : (obj.status || 'OPEN'),
+            messages: [
+              ...(obj.message ? [{ sender: 'USER', text: obj.message }] : []),
+              ...(obj.admin_reply ? [{ sender: 'ADMIN', text: obj.admin_reply }] : [])
+            ],
+            created_at_epoch: Number(obj.created_at_epoch || r.created_at_epoch || Date.now())
+          });
+        } catch {}
+      }
+    }
+
+    out.sort((a, b) => Number(b.created_at_epoch || 0) - Number(a.created_at_epoch || 0));
+    return res.json(out);
+  } catch {
+    return res.json([]);
   }
 });
 
@@ -1101,6 +1451,27 @@ async function sendIranPayamakSimpleSms(cfg, phone, message) {
   return { ok: false, error: lastError };
 }
 
+function isTechnicalFilenameToken(val) {
+  const s = String(val || '').trim();
+  if (!s) return true;
+  if (/\.(jpg|jpeg|png|webp|gif|pdf|svg)$/i.test(s)) return true;
+  if (/^(shenas?name|shename|national|profile|skill|license|doc|img|photo|file|avatar|http|data:image|track-|shaba-|personnel_code|approved|pending|blocked|rejected|deleted)/i.test(s)) {
+    return true;
+  }
+  return false;
+}
+
+function sanitizeHamkarDisplayField(val, fallback = '') {
+  const s = String(val || '').trim();
+  if (!s || isTechnicalFilenameToken(s)) return fallback;
+  return s;
+}
+
+function isJalaliBirthDate(val) {
+  const s = toStandardDigits(String(val || '').trim());
+  return /^1[34]\d{2}[\/\-](0?[1-9]|1[0-2])[\/\-](0?[1-9]|[12]\d|3[01])$/.test(s);
+}
+
 function parseHamkarCustomerRecord(raw, fallbackPhone = '') {
   if (!raw || typeof raw !== 'object') return null;
   const phone = normalizePhone(raw.phone || fallbackPhone);
@@ -1132,24 +1503,35 @@ function parseHamkarCustomerRecord(raw, fallbackPhone = '') {
   const personnelFromPart = (parts[13] || '').replace(/^PERSONNEL_CODE:/i, '').trim();
   const coordParts = (parts[9] || '').split(',').map((n) => Number(n.trim()));
 
+  // تشخیص هوشمند تاریخ تولد و نام کسب‌وکار با پاکسازی کامل نام فایل‌های انگلیسی (مانند Shename_0991930.jpg)
+  const detectedBirthDate =
+    [raw.birth_date, raw.birthDate, parts[2], ...parts].find((v) => isJalaliBirthDate(v)) || '';
+  const rawBusinessCandidate = raw.business_name || raw.businessName || parts[6] || '';
+  const cleanBusinessName = sanitizeHamkarDisplayField(rawBusinessCandidate, '');
+  const cleanRoleTitle = sanitizeHamkarDisplayField(raw.role_title || parts[3], 'متخصص تندیس');
+  const cleanCategoryGroup = sanitizeHamkarDisplayField(raw.category_group || parts[5], 'خدمات تخصصی تندیس');
+  const cleanServiceCity = sanitizeHamkarDisplayField(raw.service_city || raw.city || parts[7], 'آبادان');
+  const cleanServiceAddress = sanitizeHamkarDisplayField(parts[8] || raw.address, '');
+  const cleanSkillDescription = sanitizeHamkarDisplayField(parts[10], '');
+
   return {
     phone,
     rawPhone: raw.phone || `hamkar_${phone}`,
-    fullName: parts[0] || 'متخصص تندیس',
-    nationalCode: parts[1] || '',
-    birthDate: parts[2] || '1370/01/01',
-    roleTitle: String(raw.role_title || parts[3] || '').trim(),
+    fullName: sanitizeHamkarDisplayField(parts[0], 'متخصص تندیس'),
+    nationalCode: /^\d{10}$/.test(toStandardDigits(parts[1] || '')) ? toStandardDigits(parts[1]) : '',
+    birthDate: detectedBirthDate ? toStandardDigits(detectedBirthDate) : '',
+    roleTitle: cleanRoleTitle,
     categoryCode: String(raw.category_code || parts[4] || '').trim(),
-    categoryGroup: String(raw.category_group || parts[5] || '').trim(),
-    businessName: parts[6] || 'متخصص سیار تندیس',
-    serviceCity: String(raw.service_city || raw.city || parts[7] || 'آبادان').trim(),
-    serviceAddress: parts[8] || String(raw.address || '').trim(),
+    categoryGroup: cleanCategoryGroup,
+    businessName: cleanBusinessName,
+    serviceCity: cleanServiceCity,
+    serviceAddress: cleanServiceAddress,
     serviceLat: Number.isFinite(coordParts[0]) && coordParts[0] !== 0 ? coordParts[0] : 30.3392,
     serviceLng: Number.isFinite(coordParts[1]) && coordParts[1] !== 0 ? coordParts[1] : 48.3043,
-    skillDescription: parts[10] || '',
-    trackingCode: parts[12] || trackFromSeg || '',
+    skillDescription: cleanSkillDescription,
+    trackingCode: sanitizeHamkarDisplayField(parts[12] || trackFromSeg, ''),
     shabaNumber: String(raw.shaba_number || shabaFromSeg || '').trim(),
-    personnelCode: String(raw.personnel_code || personnelFromPart || `TND-${phone.slice(-6)}`).trim(),
+    personnelCode: sanitizeHamkarDisplayField(raw.personnel_code || personnelFromPart, `TND-${phone.slice(-6)}`),
     approvalStatus,
     isOnline: Boolean(raw.is_active_session),
     profilePhoto: raw.profile_photo || null,
@@ -1424,9 +1806,11 @@ app.get('/api/hamkar/live-state', async (req, res) => {
 
     const specialist = rawHamkar ? parseHamkarCustomerRecord(rawHamkar, phone) : null;
 
-    // استخراج آواتار و پروفایل زیبایی
+    // استخراج آواتار، تاریخ تولد، کسب‌وکار و پروفایل زیبایی از مدارک و پروفایل
     let beautyProfile = null;
     let avatarFromProfile = null;
+    let birthDateFromDocs = '';
+    let businessNameFromDocs = '';
     for (const r of sortedReviews) {
       const rid = String(r.id || '');
       if (rid === `spec_profile_${phone}`) {
@@ -1440,6 +1824,11 @@ app.get('/api/hamkar/live-state', async (req, res) => {
             if (parsed.avatar_url || parsed.profile_photo) {
               avatarFromProfile = parsed.avatar_url || parsed.profile_photo;
             }
+            if (isJalaliBirthDate(parsed.birth_date || parsed.birthDate)) {
+              birthDateFromDocs = toStandardDigits(parsed.birth_date || parsed.birthDate);
+            }
+            const cleanBiz = sanitizeHamkarDisplayField(parsed.business_name || parsed.businessName, '');
+            if (cleanBiz) businessNameFromDocs = cleanBiz;
           } catch {}
         } else if (c.startsWith('data:image') || c.startsWith('http')) {
           avatarFromProfile = c;
@@ -1448,11 +1837,18 @@ app.get('/api/hamkar/live-state', async (req, res) => {
         try {
           const dObj = JSON.parse(r.comment || '{}');
           if (!avatarFromProfile && dObj.profile_photo) avatarFromProfile = dObj.profile_photo;
+          if (!birthDateFromDocs && isJalaliBirthDate(dObj.birth_date || dObj.birthDate)) {
+            birthDateFromDocs = toStandardDigits(dObj.birth_date || dObj.birthDate);
+          }
+          const cleanBiz = sanitizeHamkarDisplayField(dObj.business_name || dObj.businessName, '');
+          if (!businessNameFromDocs && cleanBiz) businessNameFromDocs = cleanBiz;
         } catch {}
       }
     }
-    if (specialist && !specialist.profilePhoto && avatarFromProfile) {
-      specialist.profilePhoto = avatarFromProfile;
+    if (specialist) {
+      if (!specialist.profilePhoto && avatarFromProfile) specialist.profilePhoto = avatarFromProfile;
+      if (!specialist.birthDate && birthDateFromDocs) specialist.birthDate = birthDateFromDocs;
+      if (!specialist.businessName && businessNameFromDocs) specialist.businessName = businessNameFromDocs;
     }
 
     // قفل نشست تک‌دستگاهی
@@ -1725,6 +2121,381 @@ app.get('/api/hamkar/live-state', async (req, res) => {
   }
 });
 
+// ==================== درگاه پرداخت زرین‌پال (آماده اتصال آنی با Merchant ID) ====================
+const ZARINPAL_PENDING_TTL_MS = 30 * 60 * 1000;
+const zarinpalPendingPayments = new Map();
+
+function cleanupExpiredZarinpalPayments() {
+  const now = Date.now();
+  for (const [k, v] of zarinpalPendingPayments.entries()) {
+    if (!v || now - v.createdAt > ZARINPAL_PENDING_TTL_MS) {
+      zarinpalPendingPayments.delete(k);
+    }
+  }
+}
+
+function getZarinpalEndpoints() {
+  const isSandbox = String(process.env.ZARINPAL_SANDBOX || '').toLowerCase() === 'true';
+  const base = isSandbox ? 'https://sandbox.zarinpal.com' : 'https://payment.zarinpal.com';
+  return {
+    requestUrl: `${base}/pg/v4/payment/request.json`,
+    verifyUrl: `${base}/pg/v4/payment/verify.json`,
+    startPayBase: `${base}/pg/StartPay/`
+  };
+}
+
+function resolveTrustedOrigin(req) {
+  const configured = String(process.env.PUBLIC_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (/^https?:\/\/[a-z0-9.-]+(:\d+)?$/i.test(configured)) {
+    return configured;
+  }
+  const rawHost = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+  if (/^(localhost(:\d+)?|127\.0\.0\.1(:\d+)?|[a-z0-9.-]+\.run\.app|(www\.)?tandiis\.com)$/i.test(rawHost)) {
+    const proto = /^(localhost|127\.0\.0\.1)/i.test(rawHost) ? 'http' : (req.headers['x-forwarded-proto'] || req.protocol || 'https');
+    return `${proto}://${rawHost}`;
+  }
+  return 'https://tandiis.com';
+}
+
+async function settleVerifiedZarinpalPayment(pending, refId) {
+  const now = Date.now();
+  const meta = pending.meta && typeof pending.meta === 'object' ? pending.meta : {};
+  const kind = String(meta.kind || '');
+  const phone = normalizeStrictIranPhone(pending.phone || meta.phone || '');
+  const customerName = String(pending.customerName || meta.customerName || 'مشتری تندیس').trim();
+  const zRef = `ZP-${String(refId || now)}`;
+
+  if (kind === 'wallet' && phone) {
+    const curBal = Number(meta.currentBalance || 0);
+    const newBal = Math.max(0, curBal + pending.amountToman);
+    await fetchDjangoJson('reviews/', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: `wallet_${phone}`,
+        request_id: 'CUSTOMER_WALLET',
+        service_title: 'کیف پول تندیس',
+        specialist_id: 'wallet_system',
+        specialist_name: 'کیف پول تندیس',
+        customer_name: customerName,
+        customer_phone: phone,
+        stars: 5,
+        quality_tags: `WALLET:${newBal}|ZP_REF:${zRef}`,
+        comment: JSON.stringify({
+          phone,
+          balance_toman: newBal,
+          wallet_balance_toman: newBal,
+          payment_reference_id: zRef,
+          updated_at_epoch: now
+        }),
+        created_at_epoch: now,
+        synced_with_django: true
+      })
+    });
+    return;
+  }
+
+  if (kind === 'invoice' && meta.requestId && phone) {
+    const reqId = String(meta.requestId);
+    await fetchDjangoJson(`requests/${encodeURIComponent(reqId)}/`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        is_paid_online: true,
+        payment_reference_id: zRef,
+        customer_quality_tags: 'PAY_STATUS:PAID_ONLINE | IS_PAID_ONLINE:true'
+      })
+    }).catch(() => {});
+    await fetchDjangoJson('reviews/', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: `payment_${reqId}`,
+        request_id: reqId,
+        service_title: 'ONLINE_PAYMENT',
+        specialist_id: String(meta.specialistId || 'spec_101'),
+        specialist_name: String(meta.specialistName || 'متخصص تندیس'),
+        customer_name: customerName,
+        customer_phone: phone,
+        stars: 5,
+        quality_tags: `PAID:true|PAY_STATUS:PAID_ONLINE|IS_PAID_ONLINE:true|REF:${zRef}`,
+        comment: JSON.stringify({
+          is_paid_online: true,
+          payment_status: 'PAID_ONLINE',
+          payment_reference_id: zRef,
+          gateway: 'درگاه آنلاین زرین‌پال',
+          total_amount_toman: pending.amountToman,
+          updated_at_epoch: now
+        }),
+        created_at_epoch: now,
+        synced_with_django: true
+      })
+    });
+    return;
+  }
+
+  if (kind === 'parts' && phone) {
+    const items = Array.isArray(meta.items) ? meta.items : [];
+    const summaryTitle = items.map((i) => `${i.title} (${i.quantity} عدد)`).join('، ') || 'سفارش قطعات تندیس';
+    const orderId = `parts_order_${phone}_${String(now).slice(-6)}`;
+    await fetchDjangoJson('reviews/', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: orderId,
+        request_id: 'PARTS_ORDER',
+        service_title: summaryTitle,
+        specialist_id: 'parts_store',
+        specialist_name: 'فروشگاه قطعات تندیس',
+        customer_name: customerName,
+        customer_phone: phone,
+        stars: 5,
+        quality_tags: `PARTS_ORDER|TOTAL:${pending.amountToman}|METHOD:زرین‌پال|REF:${zRef}`,
+        comment: JSON.stringify({
+          id: orderId,
+          items,
+          total_toman: pending.amountToman,
+          payment_method: 'درگاه آنلاین زرین‌پال',
+          payment_reference_id: zRef,
+          needs_install: Boolean(meta.needsInstall),
+          city: String(meta.city || ''),
+          address: String(meta.address || ''),
+          created_at_epoch: now
+        }),
+        created_at_epoch: now,
+        synced_with_django: true
+      })
+    });
+    if (meta.needsInstall) {
+      await fetchDjangoJson('requests/', {
+        method: 'POST',
+        body: JSON.stringify({
+          id: `req_${crypto.randomBytes(4).toString('hex')}`,
+          customer_name: customerName,
+          customer_phone: phone,
+          service_category_id: 'auto-mobile-mechanic',
+          service_title: `نصب قطعات خریداری‌شده: ${summaryTitle}`,
+          car_model: 'سفارش فروشگاه قطعات تندیس',
+          issue_description: `نصب همزمان قطعات سفارش‌داده‌شده در نشانی: ${String(meta.address || '')}`,
+          neighborhood: String(meta.city || ''),
+          home_address: String(meta.address || ''),
+          city: String(meta.city || 'آبادان'),
+          price_toman: 0,
+          is_urgent: false,
+          status: 'PENDING_NEARBY',
+          created_at_epoch: now,
+          synced_with_django: true
+        })
+      });
+    }
+    return;
+  }
+
+  if (kind === 'beauty' && phone) {
+    const aptId = `beauty_apt_${phone}_${String(now).slice(-6)}`;
+    await fetchDjangoJson('reviews/', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: aptId,
+        request_id: 'BEAUTY_APPOINTMENT',
+        service_title: String(meta.serviceTitle || 'نوبت زیبایی تندیس'),
+        specialist_id: String(meta.specialistPhone || ''),
+        specialist_name: String(meta.specialistName || ''),
+        customer_name: customerName,
+        customer_phone: phone,
+        stars: 5,
+        quality_tags: `BEAUTY_APT|STATUS:CONFIRMED|DATE:${String(meta.dateKey || '')}|TIME:${String(meta.timeSlot || '')}`,
+        comment: JSON.stringify({
+          id: aptId,
+          specialist_phone: String(meta.specialistPhone || ''),
+          specialist_name: String(meta.specialistName || ''),
+          business_name: String(meta.businessName || ''),
+          service_title: String(meta.serviceTitle || 'نوبت زیبایی تندیس'),
+          date_key: String(meta.dateKey || ''),
+          jalali_date: String(meta.jalaliDate || ''),
+          time_slot: String(meta.timeSlot || ''),
+          deposit_toman: pending.amountToman,
+          payment_method: 'درگاه آنلاین زرین‌پال',
+          payment_reference_id: zRef,
+          status: 'CONFIRMED',
+          customer_phone: phone,
+          customer_name: customerName,
+          created_at_epoch: now
+        }),
+        created_at_epoch: now,
+        synced_with_django: true
+      })
+    });
+    return;
+  }
+
+  if (kind === 'service' && phone) {
+    await fetchDjangoJson('requests/', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: `req_${crypto.randomBytes(4).toString('hex')}`,
+        customer_name: customerName,
+        customer_phone: phone,
+        service_category_id: String(meta.serviceCategoryId || 'tech-washing-machine'),
+        service_title: String(meta.serviceTitle || 'سفارش خدمت تندیس'),
+        car_model: String(meta.carModel || 'ثبت از وب‌سایت تندیس'),
+        car_plate: String(meta.carPlate || ''),
+        issue_description: String(meta.issueDescription || ''),
+        neighborhood: String(meta.neighborhood || ''),
+        home_address: String(meta.address || ''),
+        city: String(meta.city || 'آبادان'),
+        customer_lat: Number(meta.lat || 30.3392),
+        customer_lng: Number(meta.lng || 48.3043),
+        price_toman: pending.amountToman,
+        is_paid_online: true,
+        payment_reference_id: zRef,
+        customer_quality_tags: `PAY_STATUS:PAID_ONLINE | IS_PAID_ONLINE:true | REF:${zRef}`,
+        is_urgent: Boolean(meta.isUrgent),
+        status: 'PENDING_NEARBY',
+        created_at_epoch: now,
+        synced_with_django: true
+      })
+    });
+  }
+}
+
+app.get('/api/tandis/payment/zarinpal/status', (_req, res) => {
+  const merchantId = String(process.env.ZARINPAL_MERCHANT_ID || '').trim();
+  res.json({
+    configured: Boolean(merchantId && merchantId.length >= 30),
+    provider: 'zarinpal'
+  });
+});
+
+app.post('/api/tandis/payment/zarinpal/request', async (req, res) => {
+  cleanupExpiredZarinpalPayments();
+  const merchantId = String(process.env.ZARINPAL_MERCHANT_ID || '').trim();
+  if (!merchantId || merchantId.length < 30) {
+    return res.status(503).json({
+      ok: false,
+      configured: false,
+      message: 'شناسه درگاه زرین‌پال هنوز روی سرور تنظیم نشده است.'
+    });
+  }
+
+  const amountToman = Math.round(Number(req.body?.amountToman || 0));
+  if (!Number.isFinite(amountToman) || amountToman < 1000 || amountToman > 500_000_000) {
+    return res.status(400).json({ ok: false, message: 'مبلغ پرداخت باید بین ۱,۰۰۰ تا ۵۰۰,۰۰۰,۰۰۰ تومان باشد.' });
+  }
+
+  const amountRial = amountToman * 10;
+  const title = String(req.body?.title || 'پرداخت آنلاین خدمات تندیس').slice(0, 200);
+  const phone = normalizeStrictIranPhone(req.body?.phone || '') || '';
+  const customerName = String(req.body?.customerName || 'مشتری تندیس').slice(0, 120);
+  const origin = resolveTrustedOrigin(req);
+  const callbackUrl = `${origin}/payment/zarinpal/callback`;
+  const endpoints = getZarinpalEndpoints();
+
+  try {
+    const zpRes = await fetch(endpoints.requestUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      body: JSON.stringify({
+        merchant_id: merchantId,
+        amount: amountRial,
+        callback_url: callbackUrl,
+        description: title,
+        metadata: phone ? { mobile: phone } : undefined
+      })
+    });
+    const zpJson = await zpRes.json().catch(() => ({}));
+    const authority = String(zpJson?.data?.authority || '');
+    const code = Number(zpJson?.data?.code || 0);
+    if (!zpRes.ok || code !== 100 || !authority) {
+      return res.status(502).json({
+        ok: false,
+        message: 'ایجاد تراکنش در درگاه زرین‌پال ناموفق بود. لطفاً لحظاتی دیگر تلاش کنید.'
+      });
+    }
+
+    zarinpalPendingPayments.set(authority, {
+      amountToman,
+      amountRial,
+      phone,
+      customerName,
+      title,
+      meta: req.body?.meta || null,
+      createdAt: Date.now(),
+      completed: false
+    });
+
+    return res.json({
+      ok: true,
+      authority,
+      gatewayUrl: `${endpoints.startPayBase}${encodeURIComponent(authority)}`
+    });
+  } catch {
+    return res.status(502).json({
+      ok: false,
+      message: 'خطا در برقراری ارتباط با سرور زرین‌پال. لطفاً اتصال اینترنت را بررسی کنید.'
+    });
+  }
+});
+
+app.get('/payment/zarinpal/callback', async (req, res) => {
+  cleanupExpiredZarinpalPayments();
+  const authority = String(req.query.Authority || '').trim();
+  const status = String(req.query.Status || '').trim().toUpperCase();
+  const merchantId = String(process.env.ZARINPAL_MERCHANT_ID || '').trim();
+
+  const redirectWithParams = (params) => {
+    const qs = new URLSearchParams(params).toString();
+    return res.redirect(`/?${qs}`);
+  };
+
+  if (!authority || !merchantId) {
+    return redirectWithParams({ zarinpal: 'failed', reason: 'missing_authority' });
+  }
+
+  const pending = zarinpalPendingPayments.get(authority);
+  if (!pending || pending.completed) {
+    return redirectWithParams({ zarinpal: 'failed', reason: 'invalid_session' });
+  }
+
+  pending.completed = true;
+  if (status !== 'OK') {
+    zarinpalPendingPayments.delete(authority);
+    return redirectWithParams({ zarinpal: 'cancelled' });
+  }
+
+  const endpoints = getZarinpalEndpoints();
+  try {
+    const verifyRes = await fetch(endpoints.verifyUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      body: JSON.stringify({
+        merchant_id: merchantId,
+        amount: pending.amountRial,
+        authority
+      })
+    });
+    const verifyJson = await verifyRes.json().catch(() => ({}));
+    const code = Number(verifyJson?.data?.code || 0);
+    const refId = String(verifyJson?.data?.ref_id || '');
+
+    if (verifyRes.ok && (code === 100 || code === 101)) {
+      await settleVerifiedZarinpalPayment(pending, refId).catch(() => {});
+      zarinpalPendingPayments.delete(authority);
+      return redirectWithParams({
+        zarinpal: 'success',
+        ref_id: refId || authority.slice(-8)
+      });
+    }
+    zarinpalPendingPayments.delete(authority);
+    return redirectWithParams({ zarinpal: 'failed', reason: 'verify_rejected' });
+  } catch {
+    zarinpalPendingPayments.delete(authority);
+    return redirectWithParams({ zarinpal: 'failed', reason: 'verify_error' });
+  }
+});
+
 // پل مستقیم برای تمام مسیرهای نسخه یک سرور مرکزی تندیس
 app.all('/api/v1/*', async (req, res) => {
   const subPath = req.params[0] || '';
@@ -1812,10 +2583,22 @@ const PAGE_SEO_ROUTES = [
     description: 'ساخت حساب کاربری در سامانه جامع خدمات تندیس برای ثبت و پیگیری سریع درخواست‌ها.',
   },
   {
-    paths: ['/about', '/contact'],
+    paths: ['/management', '/experts'],
+    canonical: '/management',
+    title: 'مدیریت و کارشناسان رسمی تندیس | تندیس',
+    description: 'معرفی تیم مدیریت، استانداردهای گزینش و کارشناسان رسمی و تاییدشده سامانه خدمات تندیس.',
+  },
+  {
+    paths: ['/news', '/articles', '/blog'],
+    canonical: '/news',
+    title: 'اخبار و مقالات تندیس (به‌زودی) | تندیس',
+    description: 'مجله تخصصی نگهداری لوازم خانگی، خودرو و تازه‌ترین اخبار سامانه خدمات تندیس — به‌زودی.',
+  },
+  {
+    paths: ['/about', '/contact', '/terms', '/privacy'],
     canonical: '/about',
-    title: 'درباره تندیس و نماد اعتماد | تندیس',
-    description: 'معرفی سامانه جامع تندیس، نماد اعتماد الکترونیکی (اینماد)، ضمانت خدمات و راه‌های ارتباط با پشتیبانی ۲۴ ساعته.',
+    title: 'درباره تندیس، قوانین عودت وجه و نماد اعتماد | تندیس',
+    description: 'معرفی سامانه جامع تندیس، نماد اعتماد الکترونیکی (اینماد)، قوانین خرید، رویه لغو و عودت وجه، زمان ارسال و پشتیبانی ۲۴ ساعته.',
   },
 ];
 

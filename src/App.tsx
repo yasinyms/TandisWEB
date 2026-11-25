@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, MotionConfig, motion } from 'motion/react';
 import {
   ArrowLeft,
+  ArrowRight,
   BellRing,
   CheckCircle2,
   Download,
@@ -10,7 +11,6 @@ import {
   ReceiptText,
   Search,
   ShoppingBag,
-  Sparkles,
   Star,
   Wallet,
   Wrench,
@@ -22,11 +22,19 @@ import { Footer } from './components/Footer';
 import { SearchBar } from './components/SearchBar';
 import { HeroCarousel } from './components/HeroCarousel';
 import { CategoriesGrid } from './components/CategoriesGrid';
+import { ServiceApiIcon } from './components/ServiceApiIcon';
 import { CtaBanner } from './components/CtaBanner';
-import { HomeSkeleton } from './components/HomeSkeleton';
+import { HomeSkeleton, ServiceCatalogSkeleton } from './components/HomeSkeleton';
 import { HamkarPanelShell } from './components/hamkar/HamkarPanelShell';
 import { CustomerSignupView } from './components/CustomerSignupView';
-import { AboutTandisView, RatingDialog, SupportTicketsModal } from './components/AboutSupportModals';
+import {
+  AboutTandisView,
+  ManagementExpertsView,
+  NewsArticlesView,
+  NotificationsModal,
+  RatingDialog,
+  SupportTicketsModal,
+} from './components/AboutSupportModals';
 import { AppDownloadsView } from './components/AppDownloadsView';
 import { BeautySalonView } from './components/BeautySalonView';
 import { AuthModal, CitySelectorModal, EditNameModal } from './components/CityAuthModals';
@@ -54,6 +62,7 @@ import {
   toPurePersianText,
 } from './services/tandisDefaults';
 import type {
+  AppNotificationItem,
   LiveStatePayload,
   OnlineStorePart,
   PromoSlide,
@@ -101,9 +110,27 @@ export default function App() {
   const [hamkarInitialMode, setHamkarInitialMode] = useState<'login' | 'signup'>(initialRoute.hamkarMode);
   const [serviceSubTab, setServiceSubTab] = useState<ServiceSubTab>(initialRoute.serviceSubTab);
 
-  // هویت و شهر ذخیره‌شده
-  const [phone, setPhone] = useState<string>(() => localStorage.getItem('tandis_phone') || '');
-  const [customerName, setCustomerName] = useState<string>(() => localStorage.getItem('tandis_name') || '');
+  // هویت و شهر ذخیره‌شده (صرفاً در صورت وجود نشست تاییدشده معتبر)
+  const initialVerifiedAuth = useMemo(() => {
+    try {
+      const verified = localStorage.getItem('tandis_customer_auth_verified') === '1';
+      const savedPhone = (localStorage.getItem('tandis_phone') || '').trim();
+      const savedName = (localStorage.getItem('tandis_name') || '').trim();
+      if (verified && /^09\d{9}$/.test(savedPhone)) {
+        return { phone: savedPhone, name: savedName };
+      }
+      // پاکسازی نشست‌های ناقص یا قدیمی تاییدنشده برای جلوگیری از نمایش نام پیش از ورود
+      localStorage.removeItem('tandis_phone');
+      localStorage.removeItem('tandis_name');
+      localStorage.removeItem('tandis_customer_auth_verified');
+    } catch {
+      // ignore storage errors
+    }
+    return { phone: '', name: '' };
+  }, []);
+
+  const [phone, setPhone] = useState<string>(initialVerifiedAuth.phone);
+  const [customerName, setCustomerName] = useState<string>(initialVerifiedAuth.name);
   const [selectedCityName, setSelectedCityName] = useState<string>(
     () => localStorage.getItem('tandis_city') || 'آبادان'
   );
@@ -122,9 +149,35 @@ export default function App() {
   // داده‌های زنده سرور مرکزی تندیس
   const [liveState, setLiveState] = useState<LiveStatePayload | null>(null);
   const [initialLoading, setInitialLoading] = useState<boolean>(true);
-  const [syncing, setSyncing] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
+
+  // مرکز اعلان‌ها (فعالیت‌های سایت + پیام‌های ارسالی مدیریت)
+  const [showNotificationsModal, setShowNotificationsModal] = useState(false);
+  const [localNotifications, setLocalNotifications] = useState<AppNotificationItem[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('tandis_local_notifs') || '[]');
+      return Array.isArray(saved) ? saved : [];
+    } catch {
+      return [];
+    }
+  });
+  const [readNotifIds, setReadNotifIds] = useState<string[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('tandis_read_notifs') || '[]');
+      return Array.isArray(saved) ? saved : [];
+    } catch {
+      return [];
+    }
+  });
+  const [clearedNotifIds, setClearedNotifIds] = useState<string[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('tandis_cleared_notifs') || '[]');
+      return Array.isArray(saved) ? saved : [];
+    } catch {
+      return [];
+    }
+  });
 
   // مودال‌های زنده
   const [showCityModal, setShowCityModal] = useState(false);
@@ -143,15 +196,43 @@ export default function App() {
     amountToman: number;
     title: string;
     onSuccess: () => Promise<void>;
+    paymentMeta?: Record<string, unknown> | null;
   }>({
     open: false,
     amountToman: 0,
     title: '',
     onSuccess: async () => {},
+    paymentMeta: null,
   });
 
   const seenInvoiceSignaturesRef = useRef<Set<string>>(new Set());
   const toastTimerRef = useRef<number | null>(null);
+
+  const pushLocalNotification = useCallback(
+    (entry: { title: string; message: string; type: AppNotificationItem['type']; actionNav?: string; force?: boolean }) => {
+      if (!phone && !entry.force) return;
+      const nextItem: AppNotificationItem = {
+        id: `local_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        title: entry.title,
+        message: entry.message,
+        type: entry.type,
+        createdAtEpoch: Date.now(),
+        isRead: false,
+        senderRole: 'SYSTEM',
+        actionNav: entry.actionNav,
+      };
+      setLocalNotifications((prev) => {
+        const updated = [nextItem, ...prev].slice(0, 40);
+        try {
+          localStorage.setItem('tandis_local_notifs', JSON.stringify(updated));
+        } catch {
+          // ignore storage quota errors
+        }
+        return updated;
+      });
+    },
+    [phone]
+  );
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -167,17 +248,23 @@ export default function App() {
 
   const runLiveSync = useCallback(
     async (targetPhone = phone) => {
-      setSyncing(true);
       try {
         const data = await fetchLiveState(targetPhone);
         setLiveState(data);
         if (data.isBlocked && targetPhone) {
           localStorage.removeItem('tandis_phone');
           localStorage.removeItem('tandis_name');
+          localStorage.removeItem('tandis_customer_auth_verified');
           setPhone('');
           setCustomerName('');
+          setShowNotificationsModal(false);
           showToast('حساب کاربری شما از سمت مدیریت مسدود شده است.');
-        } else if (data.activeCustomer?.full_name) {
+        } else if (
+          targetPhone &&
+          /^09\d{9}$/.test(targetPhone) &&
+          localStorage.getItem('tandis_customer_auth_verified') === '1' &&
+          data.activeCustomer?.full_name
+        ) {
           const cleanName = data.activeCustomer.full_name.split('|')[0].trim();
           if (cleanName && cleanName !== customerName) {
             setCustomerName(cleanName);
@@ -185,14 +272,18 @@ export default function App() {
           }
         }
         if (targetPhone) {
+          if (Array.isArray(data.tickets) && data.tickets.length > 0) {
+            setTickets(data.tickets);
+          }
           fetchCustomerTickets(targetPhone)
-            .then(setTickets)
+            .then((list) => {
+              if (list.length > 0 || !data.tickets?.length) setTickets(list);
+            })
             .catch(() => {});
         }
       } catch {
         // در صورت اختلال لحظه‌ای شبکه، داده فعلی حفظ می‌شود
       } finally {
-        setSyncing(false);
         setInitialLoading(false);
       }
     },
@@ -215,6 +306,25 @@ export default function App() {
     if (typeof document !== 'undefined') {
       document.title = initialRoute.pageTitle;
     }
+    if (typeof window !== 'undefined' && window.location.search) {
+      const qs = new URLSearchParams(window.location.search);
+      const zpStatus = qs.get('zarinpal');
+      const zpRef = qs.get('ref_id');
+      if (zpStatus === 'success') {
+        showToast(
+          zpRef
+            ? `پرداخت آنلاین زرین‌پال با موفقیت انجام شد. کد رهگیری: ${toPersianDigits(zpRef)}`
+            : 'پرداخت آنلاین زرین‌پال با موفقیت انجام شد.'
+        );
+        window.history.replaceState({}, '', window.location.pathname);
+      } else if (zpStatus === 'cancelled') {
+        showToast('پرداخت در درگاه زرین‌پال توسط کاربر لغو شد.');
+        window.history.replaceState({}, '', window.location.pathname);
+      } else if (zpStatus === 'failed') {
+        showToast('پرداخت در درگاه زرین‌پال تایید نشد. در صورت کسر وجه، تا ۷۲ ساعت عودت داده می‌شود.');
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
     const syncFromBrowserUrl = () => {
       const resolved = parseRouteFromLocation(window.location.pathname, window.location.hash);
       setActiveView(resolved.activeView);
@@ -230,13 +340,15 @@ export default function App() {
       window.removeEventListener('popstate', syncFromBrowserUrl);
       window.removeEventListener('hashchange', syncFromBrowserUrl);
     };
-  }, [initialRoute.pageTitle]);
+  }, [initialRoute.pageTitle, showToast]);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem('tandis_phone');
     localStorage.removeItem('tandis_name');
+    localStorage.removeItem('tandis_customer_auth_verified');
     setPhone('');
     setCustomerName('');
+    setShowNotificationsModal(false);
     setInvoiceTarget(null);
     setCancelTarget(null);
     setRatingTarget(null);
@@ -252,6 +364,7 @@ export default function App() {
             beautyAppointments: [],
             customerLoans: [],
             partInquiries: [],
+            notifications: [],
           }
         : prev
     );
@@ -283,20 +396,45 @@ export default function App() {
     }
   }, [phone, liveState?.requests]);
 
-  // ترکیب دسته‌بندی‌های استاندارد ۳۱ زیرخدمت با تنظیمات زنده سرور
+  // ترکیب دسته‌بندی‌های استاندارد با دسته‌بندی‌ها، آیکون‌ها و رنگ‌های زنده دریافت‌شده از API برنامه مشتری
   const categories: ServiceCategoryGroup[] = useMemo(() => {
     const raw = liveState?.categories;
     if (!Array.isArray(raw) || raw.length === 0) return DEFAULT_CATEGORIES;
-    return DEFAULT_CATEGORIES.map((defGroup) => {
+
+    const readStr = (obj: Record<string, unknown>, ...keys: string[]): string | undefined => {
+      for (const k of keys) {
+        const v = obj[k];
+        if (typeof v === 'string' && v.trim()) return v.trim();
+      }
+      return undefined;
+    };
+
+    const mergedDefaults = DEFAULT_CATEGORIES.map((defGroup) => {
       const remoteGroup = raw.find((r) => String(r.slug || r.id || '') === defGroup.slug);
       if (!remoteGroup) return defGroup;
-      const remoteSubs = Array.isArray(remoteGroup.subcategories) ? remoteGroup.subcategories : [];
-      const mergedSubs = defGroup.subcategories.map((defSub) => {
-        const rs = remoteSubs.find(
-          (x: Record<string, unknown>) => String(x.id || x.slug || '') === defSub.id
-        ) as Record<string, unknown> | undefined;
-        if (!rs) return defSub;
+      const remoteSubs = Array.isArray(remoteGroup.subcategories)
+        ? (remoteGroup.subcategories as Array<Record<string, unknown>>)
+        : [];
+      const knownSubIds = new Set(defGroup.subcategories.map((s) => s.id));
+      const groupColorHex = readStr(remoteGroup, 'color_hex', 'colorHex', 'accent_hex', 'accentHex') || defGroup.accentHex;
+      const groupIconKey = readStr(remoteGroup, 'icon_key', 'iconKey', 'icon_name', 'iconName');
+      const groupIconUrl = readStr(remoteGroup, 'icon_url', 'iconUrl', 'image_url', 'imageUrl', 'icon_base64');
+      const groupIconStyle = readStr(remoteGroup, 'icon_style', 'iconStyle');
+
+      const mergedSubs: SubServiceItem[] = defGroup.subcategories.map((defSub) => {
+        const rs = remoteSubs.find((x) => String(x.id || x.slug || '') === defSub.id);
+        if (!rs) {
+          return {
+            ...defSub,
+            colorHex: defSub.colorHex || groupColorHex,
+          };
+        }
         const remotePrice = Number(rs.basePriceToman ?? rs.base_price_toman ?? rs.price_toman ?? 0);
+        const rawSubColor = readStr(rs, 'color_hex', 'colorHex');
+        const effectiveSubColor =
+          rawSubColor && rawSubColor.toUpperCase() !== '#0E4D34'
+            ? rawSubColor
+            : groupColorHex || rawSubColor;
         return {
           ...defSub,
           title: toPurePersianText(String(rs.title || rs.name || defSub.title)) || defSub.title,
@@ -304,19 +442,181 @@ export default function App() {
             toPurePersianText(String(rs.subtitle || rs.description || defSub.subtitle)) || defSub.subtitle,
           basePriceToman: remotePrice > 0 ? remotePrice : defSub.basePriceToman,
           etaText: toPurePersianText(String(rs.etaText || rs.eta_text || defSub.etaText)) || defSub.etaText,
+          isComingSoon: Boolean(rs.is_coming_soon ?? rs.isComingSoon ?? defSub.isComingSoon),
+          iconKey: readStr(rs, 'icon_key', 'iconKey', 'icon_name', 'iconName') || defSub.iconKey,
+          iconUrl: readStr(rs, 'icon_url', 'iconUrl', 'image_url', 'imageUrl', 'icon_base64') || defSub.iconUrl,
+          iconStyle: readStr(rs, 'icon_style', 'iconStyle') || groupIconStyle,
+          colorHex: effectiveSubColor,
         };
       });
+
+      // افزودن زیرخدمت‌های جدیدی که توسط مدیر به این دسته‌بندی اضافه شده است
+      for (const rs of remoteSubs) {
+        const subId = String(rs.id || rs.slug || '').trim();
+        const subTitle = toPurePersianText(String(rs.title || rs.name || '')).trim();
+        if (!subId || !subTitle || knownSubIds.has(subId)) continue;
+        knownSubIds.add(subId);
+        const remotePrice = Number(rs.basePriceToman ?? rs.base_price_toman ?? rs.price_toman ?? 0);
+        const readyProblems = Array.isArray(rs.readyProblems || rs.ready_problems)
+          ? ((rs.readyProblems || rs.ready_problems) as unknown[]).map((p) => String(p)).filter(Boolean)
+          : ['نیاز به کارشناسی و بررسی تخصصی در محل', 'سرویس و نگهداری دوره‌ای', 'تعمیر یا تعویض قطعه معیوب'];
+        const rawSubColor = readStr(rs, 'color_hex', 'colorHex');
+        const effectiveSubColor =
+          rawSubColor && rawSubColor.toUpperCase() !== '#0E4D34'
+            ? rawSubColor
+            : groupColorHex || rawSubColor;
+        mergedSubs.push({
+          id: subId,
+          title: subTitle,
+          subtitle: toPurePersianText(String(rs.subtitle || rs.description || 'ارائه خدمت تخصصی در محل توسط متخصصان تندیس')),
+          basePriceToman: remotePrice > 0 ? remotePrice : 350000,
+          etaText: toPurePersianText(String(rs.etaText || rs.eta_text || '۴۵ دقیقه')),
+          readyProblems,
+          isComingSoon: Boolean(rs.is_coming_soon ?? rs.isComingSoon ?? false),
+          iconKey: readStr(rs, 'icon_key', 'iconKey', 'icon_name', 'iconName') || groupIconKey,
+          iconUrl: readStr(rs, 'icon_url', 'iconUrl', 'image_url', 'imageUrl', 'icon_base64'),
+          iconStyle: readStr(rs, 'icon_style', 'iconStyle') || groupIconStyle,
+          colorHex: effectiveSubColor,
+        });
+      }
+
       return {
         ...defGroup,
         title: toPurePersianText(String(remoteGroup.title || remoteGroup.name || defGroup.title)) || defGroup.title,
         subtitle:
           toPurePersianText(String(remoteGroup.subtitle || remoteGroup.description || defGroup.subtitle)) ||
           defGroup.subtitle,
-        isComingSoon: Boolean(remoteGroup.is_coming_soon ?? defGroup.isComingSoon),
+        isComingSoon: Boolean(remoteGroup.is_coming_soon ?? remoteGroup.isComingSoon ?? defGroup.isComingSoon),
+        colorHex: groupColorHex,
+        accentHex: groupColorHex || defGroup.accentHex,
+        iconKey: groupIconKey || defGroup.iconKey,
+        iconUrl: groupIconUrl || defGroup.iconUrl,
+        iconStyle: groupIconStyle || defGroup.iconStyle,
         subcategories: mergedSubs,
       };
     });
+
+    // افزودن دسته‌بندی‌های کاملاً جدیدی که از نرم‌افزار تندیس مدیریت ساخته شده‌اند
+    const defaultSlugs = new Set(DEFAULT_CATEGORIES.map((g) => g.slug));
+    const extraRemoteGroups: ServiceCategoryGroup[] = [];
+    for (const rg of raw) {
+      const slug = String(rg.slug || rg.id || '').trim();
+      const title = toPurePersianText(String(rg.title || rg.name || '')).trim();
+      if (!slug || !title || defaultSlugs.has(slug)) continue;
+      defaultSlugs.add(slug);
+      const groupColorHex = readStr(rg, 'color_hex', 'colorHex', 'accent_hex', 'accentHex');
+      const groupIconKey = readStr(rg, 'icon_key', 'iconKey', 'icon_name', 'iconName');
+      const groupIconUrl = readStr(rg, 'icon_url', 'iconUrl', 'image_url', 'imageUrl', 'icon_base64');
+      const groupIconStyle = readStr(rg, 'icon_style', 'iconStyle');
+      const remoteSubs = Array.isArray(rg.subcategories)
+        ? (rg.subcategories as Array<Record<string, unknown>>)
+        : [];
+      const mappedSubs: SubServiceItem[] =
+        remoteSubs.length > 0
+          ? remoteSubs
+              .map((rs, idx) => {
+                const subId = String(rs.id || rs.slug || `${slug}_sub_${idx + 1}`).trim();
+                const subTitle = toPurePersianText(String(rs.title || rs.name || '')).trim();
+                if (!subTitle) return null;
+                const remotePrice = Number(rs.basePriceToman ?? rs.base_price_toman ?? rs.price_toman ?? 0);
+                const rawSubColor = readStr(rs, 'color_hex', 'colorHex');
+                return {
+                  id: subId,
+                  title: subTitle,
+                  subtitle: toPurePersianText(String(rs.subtitle || rs.description || 'خدمات تخصصی تندیس در محل')),
+                  basePriceToman: remotePrice > 0 ? remotePrice : 350000,
+                  etaText: toPurePersianText(String(rs.etaText || rs.eta_text || '۴۵ دقیقه')),
+                  readyProblems: Array.isArray(rs.readyProblems || rs.ready_problems)
+                    ? ((rs.readyProblems || rs.ready_problems) as unknown[]).map((p) => String(p)).filter(Boolean)
+                    : ['نیاز به کارشناسی در محل', 'سفارش خدمت تخصصی'],
+                  isComingSoon: Boolean(rs.is_coming_soon ?? rs.isComingSoon ?? false),
+                  iconKey: readStr(rs, 'icon_key', 'iconKey', 'icon_name', 'iconName') || groupIconKey,
+                  iconUrl: readStr(rs, 'icon_url', 'iconUrl', 'image_url', 'imageUrl', 'icon_base64'),
+                  iconStyle: readStr(rs, 'icon_style', 'iconStyle') || groupIconStyle,
+                  colorHex:
+                    rawSubColor && rawSubColor.toUpperCase() !== '#0E4D34'
+                      ? rawSubColor
+                      : groupColorHex || rawSubColor,
+                } as SubServiceItem;
+              })
+              .filter((x): x is SubServiceItem => Boolean(x))
+          : [
+              {
+                id: `${slug}_default`,
+                title,
+                subtitle: toPurePersianText(String(rg.subtitle || rg.description || 'ثبت درخواست خدمت در محل')),
+                basePriceToman: Number(rg.base_price_toman || rg.price_toman || 350000),
+                etaText: '۴۵ دقیقه',
+                readyProblems: ['نیاز به کارشناسی و انجام خدمت در محل'],
+                isComingSoon: Boolean(rg.is_coming_soon ?? rg.isComingSoon ?? false),
+                iconKey: groupIconKey,
+                iconUrl: groupIconUrl,
+                iconStyle: groupIconStyle,
+                colorHex: groupColorHex,
+              },
+            ];
+
+      extraRemoteGroups.push({
+        slug,
+        title,
+        subtitle: toPurePersianText(String(rg.subtitle || rg.description || 'دسته‌بندی تخصصی مدیریت تندیس')),
+        isComingSoon: Boolean(rg.is_coming_soon ?? rg.isComingSoon ?? false),
+        colorHex: groupColorHex,
+        accentHex: groupColorHex,
+        iconKey: groupIconKey,
+        iconUrl: groupIconUrl,
+        iconStyle: groupIconStyle,
+        subcategories: mappedSubs,
+      });
+    }
+
+    return [...mergedDefaults, ...extraRemoteGroups];
   }, [liveState?.categories]);
+
+  // ترکیب اعلان‌های محلی کاربر با پیام‌های زنده ارسال‌شده از سامانه تندیس مدیریت (فقط پس از ورود به حساب)
+  const mergedNotifications: AppNotificationItem[] = useMemo(() => {
+    if (!phone) return [];
+    const clearedSet = new Set(clearedNotifIds);
+    const readSet = new Set(readNotifIds);
+    const byId = new Map<string, AppNotificationItem>();
+    for (const item of [...(liveState?.notifications || []), ...localNotifications]) {
+      if (!item?.id || clearedSet.has(item.id)) continue;
+      if (!byId.has(item.id)) {
+        byId.set(item.id, {
+          ...item,
+          isRead: Boolean(item.isRead) || readSet.has(item.id),
+        });
+      }
+    }
+    return Array.from(byId.values()).sort((a, b) => (b.createdAtEpoch || 0) - (a.createdAtEpoch || 0));
+  }, [phone, liveState?.notifications, localNotifications, readNotifIds, clearedNotifIds]);
+
+  const unreadNotificationsCount = useMemo(
+    () => mergedNotifications.filter((n) => !n.isRead).length,
+    [mergedNotifications]
+  );
+
+  const handleMarkAllNotificationsRead = useCallback(() => {
+    const allIds = Array.from(new Set([...readNotifIds, ...mergedNotifications.map((n) => n.id)]));
+    setReadNotifIds(allIds);
+    try {
+      localStorage.setItem('tandis_read_notifs', JSON.stringify(allIds));
+    } catch {
+      // ignore
+    }
+  }, [readNotifIds, mergedNotifications]);
+
+  const handleClearAllNotifications = useCallback(() => {
+    const allIds = Array.from(new Set([...clearedNotifIds, ...mergedNotifications.map((n) => n.id)]));
+    setClearedNotifIds(allIds);
+    setLocalNotifications([]);
+    try {
+      localStorage.setItem('tandis_cleared_notifs', JSON.stringify(allIds));
+      localStorage.setItem('tandis_local_notifs', '[]');
+    } catch {
+      // ignore
+    }
+  }, [clearedNotifIds, mergedNotifications]);
 
   // صرفاً اسلایدرهای واقعی دریافت‌شده از سرور مرکزی (بدون نمایش اسلایدرهای پیش‌فرض ساختگی)
   const liveSliders: PromoSlide[] = useMemo(() => {
@@ -327,22 +627,28 @@ export default function App() {
 
   const ota = liveState?.otaConfig;
   const isStoreEnabled = ota?.is_online_store_enabled ?? ota?.online_store_enabled ?? true;
-  const supportPhone = ota?.support_phone || '061-53220000';
+  const rawSupportPhone = String(ota?.support_phone || '').trim();
+  const supportPhone =
+    !rawSupportPhone || rawSupportPhone === '061-53220000' ? '09307327975' : rawSupportPhone;
 
   const storeParts: OnlineStorePart[] = useMemo(() => {
     const remote = ota?.online_store_parts;
     if (Array.isArray(remote) && remote.length > 0) {
-      return remote.map((p, i) => ({
-        id: p.id || `remote_part_${i}`,
-        title: toPurePersianText(p.title) || 'قطعه اصلی تندیس',
-        category: toPurePersianText(p.category) || 'قطعات اصلی تندیس',
-        brand: toPurePersianText(p.brand) || 'تندیس',
-        compatibleModel: toPurePersianText(p.compatible_model) || 'انواع مدل‌های استاندارد',
-        partCode: toPurePersianText(p.part_code) || `کد-${toPersianDigits(i + 101)}`,
-        warranty: toPurePersianText(p.warranty) || '۱۲ ماه ضمانت',
-        priceToman: Number(p.price_toman || 0),
-        inStock: p.in_stock ?? true,
-      }));
+      return remote.map((p, i) => {
+        const fallbackPrice = DEFAULT_ONLINE_STORE_PARTS[i % DEFAULT_ONLINE_STORE_PARTS.length]?.priceToman || 580000;
+        const parsedPrice = Number(p.price_toman || 0);
+        return {
+          id: p.id || `remote_part_${i}`,
+          title: toPurePersianText(p.title) || 'قطعه اصلی تندیس',
+          category: toPurePersianText(p.category) || 'قطعات اصلی تندیس',
+          brand: toPurePersianText(p.brand) || 'تندیس',
+          compatibleModel: toPurePersianText(p.compatible_model) || 'انواع مدل‌های استاندارد',
+          partCode: toPurePersianText(p.part_code) || `کد-${toPersianDigits(i + 101)}`,
+          warranty: toPurePersianText(p.warranty) || '۱۲ ماه ضمانت',
+          priceToman: parsedPrice > 0 ? parsedPrice : fallbackPrice,
+          inStock: p.in_stock ?? true,
+        };
+      });
     }
     return DEFAULT_ONLINE_STORE_PARTS;
   }, [ota]);
@@ -371,11 +677,20 @@ export default function App() {
       .filter((g) => g.subcategories.length > 0);
   }, [categories, serviceSearchQuery, selectedGroupSlug]);
 
-  const openShaparak = (amountToman: number, title: string, onSuccess: () => Promise<void>) => {
-    setShaparakState({ open: true, amountToman, title, onSuccess });
+  const openShaparak = (
+    amountToman: number,
+    title: string,
+    onSuccess: () => Promise<void>,
+    paymentMeta?: Record<string, unknown>
+  ) => {
+    setShaparakState({ open: true, amountToman, title, onSuccess, paymentMeta: paymentMeta || null });
   };
 
   const handleOpenSubService = (group: ServiceCategoryGroup, sub: SubServiceItem) => {
+    if (sub.isComingSoon || group.isComingSoon) {
+      showToast(`سرویس «${sub.title}» به‌زودی در شهر شما فعال می‌شود.`);
+      return;
+    }
     if (group.slug === 'cat-beauty-personal') {
       setSelectedGroupSlug('cat-beauty-personal');
       setShowBeautyBookingInsideCategory(true);
@@ -383,10 +698,6 @@ export default function App() {
       setServiceSubTab('catalog');
       pushBrowserPath('/beauty', ROUTE_TITLES['/beauty']);
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-    if (group.isComingSoon) {
-      showToast('سرویس خودرو و پیک به‌زودی در شهر شما فعال می‌شود.');
       return;
     }
     setWizardTarget({ group, sub });
@@ -428,6 +739,16 @@ export default function App() {
       pushBrowserPath('/services', ROUTE_TITLES['/services']);
       return;
     }
+    if (dest === 'management') {
+      setActiveView('management');
+      pushBrowserPath('/management', ROUTE_TITLES['/management']);
+      return;
+    }
+    if (dest === 'news') {
+      setActiveView('news');
+      pushBrowserPath('/news', ROUTE_TITLES['/news']);
+      return;
+    }
     if (dest === 'downloads') {
       setActiveView('downloads');
       pushBrowserPath('/app', ROUTE_TITLES['/app']);
@@ -438,22 +759,24 @@ export default function App() {
       pushBrowserPath('/signup', ROUTE_TITLES['/signup']);
       return;
     }
-    if (dest === 'about') {
+    if (dest === 'about' || dest === 'terms' || dest === 'privacy') {
+      const targetPath = dest === 'terms' ? '/terms' : dest === 'privacy' ? '/privacy' : '/about';
       setActiveView('about');
-      pushBrowserPath('/about', ROUTE_TITLES['/about']);
+      pushBrowserPath(targetPath, ROUTE_TITLES[targetPath]);
       return;
     }
     setActiveView('home');
     pushBrowserPath('/', ROUTE_TITLES['/']);
   }, []);
 
-  const handleSelectHomeCategory = (catId: string) => {
+  const handleSelectHomeCategory = (catSlugOrId: string) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    if (catId === 'auto-request') {
-      showToast('سرویس درخواست خودرو و پیک به‌زودی در شهر شما فعال می‌شود.');
+    const targetSlug = HOME_CATEGORY_TO_SERVICE_SLUG[catSlugOrId] || catSlugOrId || 'all';
+    const matchedGroup = categories.find((g) => g.slug === targetSlug);
+    if (catSlugOrId === 'auto-request' || matchedGroup?.isComingSoon) {
+      showToast(`سرویس «${matchedGroup?.title || 'درخواست خودرو و پیک'}» به‌زودی در شهر شما فعال می‌شود.`);
       return;
     }
-    const targetSlug = HOME_CATEGORY_TO_SERVICE_SLUG[catId] || 'all';
     setSelectedGroupSlug(targetSlug);
     setShowBeautyBookingInsideCategory(targetSlug === 'cat-beauty-personal');
     setServiceSearchQuery('');
@@ -479,16 +802,18 @@ export default function App() {
   };
 
   const headerActiveNav =
-    activeView === 'services' ? (serviceSubTab === 'catalog' ? 'services' : serviceSubTab) : activeView;
+    activeView === 'services'
+      ? serviceSubTab === 'catalog'
+        ? selectedGroupSlug === 'cat-beauty-personal' && showBeautyBookingInsideCategory
+          ? 'beauty'
+          : 'services'
+        : serviceSubTab
+      : activeView;
 
-  const currentUser = phone
-    ? {
-        isLoggedIn: true,
-        phone,
-        name: customerName || 'کاربر تندیس',
-        role: 'عضو رسمی تندیس',
-      }
-    : null;
+  const activeSelectedGroup = useMemo(
+    () => (selectedGroupSlug !== 'all' ? categories.find((g) => g.slug === selectedGroupSlug) || null : null),
+    [categories, selectedGroupSlug]
+  );
 
   const quickAccessCards = [
     {
@@ -550,22 +875,18 @@ export default function App() {
 
         {/* هدر اصلی */}
         <Header
-          currentCity={selectedCityName}
+          selectedCity={selectedCityName}
           activeNav={headerActiveNav}
           onNavClick={handleNavigate}
           onOpenDrawer={() => setDrawerOpen(true)}
           onOpenCityModal={() => setShowCityModal(true)}
-          user={currentUser}
-          walletBalance={walletBalance}
-          syncing={syncing}
-          onManualSync={() => {
-            runLiveSync(phone);
-            showToast('اطلاعات به‌صورت زنده با سرور مرکزی تندیس همگام شد.');
-          }}
-          onOpenAuth={() => setShowAuthModal(true)}
-          onEditName={() => setShowEditNameModal(true)}
-          onOpenOrders={() => handleNavigate('orders')}
-          onLogout={handleLogout}
+          onOpenAuthModal={() => setShowAuthModal(true)}
+          customerPhone={phone}
+          customerName={phone ? customerName : ''}
+          unreadNotificationsCount={phone ? unreadNotificationsCount : 0}
+          onOpenNotifications={phone ? () => setShowNotificationsModal(true) : undefined}
+          onOpenEditName={phone ? () => setShowEditNameModal(true) : undefined}
+          onLogout={phone ? handleLogout : undefined}
         />
 
         {/* اعلان شناور بازخورد */}
@@ -720,8 +1041,9 @@ export default function App() {
                     }}
                   />
 
-                  {/* شبکه دسته‌بندی‌های سه‌بعدی تندیس */}
+                  {/* دسته‌بندی مینیمال خدمات تندیس (شامل دسته‌های جدید اضافه‌شده توسط مدیریت) */}
                   <CategoriesGrid
+                    categories={categories}
                     selectedCategoryId="all"
                     onSelectCategory={handleSelectHomeCategory}
                   />
@@ -843,7 +1165,9 @@ export default function App() {
                   </div>
 
                   {/* زیرتب ۱: کاتالوگ ۸ گروه و ۳۱ خدمت تخصصی */}
-                  {serviceSubTab === 'catalog' && (
+                  {serviceSubTab === 'catalog' && initialLoading && <ServiceCatalogSkeleton />}
+
+                  {serviceSubTab === 'catalog' && !initialLoading && (
                     <div className="space-y-6">
                       {/* کارت پیگیری سفارش فعال در صورت وجود */}
                       {phone && activeOrder && (
@@ -959,6 +1283,14 @@ export default function App() {
                                             });
                                             showToast('پرداخت آنلاین فاکتور در سرور مرکزی ثبت شد.');
                                             runLiveSync(phone);
+                                          },
+                                          {
+                                            kind: 'invoice',
+                                            phone,
+                                            customerName: customerName || 'مشتری تندیس',
+                                            requestId: activeOrder.id,
+                                            specialistId: activeOrder.assigned_specialist_id || 'spec_101',
+                                            specialistName: activeOrder.assigned_specialist_name || 'متخصص تندیس',
                                           }
                                         );
                                       }
@@ -1013,132 +1345,152 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* ۸ گروه اصلی خدمات */}
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h2 className="text-base sm:text-lg font-black text-[#12292c]">
-                            دسته‌بندی خدمات
-                          </h2>
-                          {selectedGroupSlug !== 'all' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedGroupSlug('all');
-                                setShowBeautyBookingInsideCategory(false);
-                              }}
-                              className="text-xs font-bold text-[#0b5c60] cursor-pointer"
-                            >
-                              نمایش همه
-                            </button>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                          {categories.map((grp) => {
-                            const active = selectedGroupSlug === grp.slug;
-                            return (
-                              <motion.button
-                                key={grp.slug}
-                                whileHover={{ y: -2 }}
-                                whileTap={{ scale: 0.97 }}
-                                type="button"
-                                onClick={() => {
-                                  const nextSlug = selectedGroupSlug === grp.slug ? 'all' : grp.slug;
-                                  setSelectedGroupSlug(nextSlug);
-                                  setShowBeautyBookingInsideCategory(nextSlug === 'cat-beauty-personal');
-                                }}
-                                className={`text-right rounded-3xl border p-4 transition cursor-pointer space-y-2 ${
-                                  active
-                                    ? 'border-[#0b5c60] bg-[#0b5c60]/10 shadow-xs'
-                                    : 'bg-white border-[#dfecec] hover:border-[#0a8387]/50'
-                                }`}
-                              >
-                                <div className="flex items-center justify-between gap-1">
-                                  <span className="p-2 rounded-xl bg-[#0b5c60]/10 text-[#0b5c60]">
-                                    {grp.slug === 'cat-beauty-personal' ? (
-                                      <Sparkles className="w-4 h-4" />
-                                    ) : (
-                                      <Wrench className="w-4 h-4" />
-                                    )}
-                                  </span>
-                                  <span
-                                    className={`text-[11px] font-bold ${
-                                      grp.isComingSoon ? 'text-[#d97706]' : 'text-[#5f777b]'
-                                    }`}
-                                  >
-                                    {grp.isComingSoon
-                                      ? 'به‌زودی'
-                                      : `${toPersianDigits(grp.subcategories.length)} خدمت`}
-                                  </span>
-                                </div>
-                                <div className="font-black text-xs sm:text-sm leading-5 text-[#12292c]">
-                                  {grp.title}
-                                </div>
-                              </motion.button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* ۳۱ زیرخدمت تخصصی (شامل زیرمجموعه زیبایی بانوان در دسته زیبایی و سلامت) */}
-                      <div className="space-y-6">
-                        {filteredServiceCategories.map((group) => (
-                          <section key={group.slug} className="space-y-4">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div>
-                                <h3 className="text-base sm:text-lg font-black text-[#12292c]">
-                                  {group.title}
-                                </h3>
-                                <p className="text-xs text-[#5f777b]">{group.subtitle}</p>
-                              </div>
-                              {group.slug === 'cat-beauty-personal' && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedGroupSlug('cat-beauty-personal');
-                                    setShowBeautyBookingInsideCategory((prev) => !prev);
-                                  }}
-                                  className="rounded-xl bg-[#0a8387] hover:bg-[#0b5c60] text-white px-3.5 py-2 text-xs font-extrabold cursor-pointer whitespace-nowrap transition-colors"
-                                >
-                                  {showBeautyBookingInsideCategory
-                                    ? 'بستن تقویم نوبت‌دهی زیبایی بانوان'
-                                    : 'زیرمجموعه زیبایی بانوان (نوبت‌دهی آنلاین)'}
-                                </button>
-                              )}
+                      {/* نمایش مینیمال دسته‌بندی‌ها: هنگام انتخاب یک دسته، فقط همان دسته نمایش داده می‌شود */}
+                      {activeSelectedGroup ? (
+                        <div className="rounded-2xl bg-white border border-[#dfecec] p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+                          <div className="flex items-center gap-3">
+                            <ServiceApiIcon
+                              iconKey={activeSelectedGroup.iconKey}
+                              iconUrl={activeSelectedGroup.iconUrl}
+                              groupSlug={activeSelectedGroup.slug}
+                              colorHex={activeSelectedGroup.colorHex || activeSelectedGroup.accentHex}
+                              iconStyle={activeSelectedGroup.iconStyle}
+                              size="lg"
+                              alt={activeSelectedGroup.title}
+                            />
+                            <div className="space-y-0.5">
+                              <div className="text-[11px] font-bold text-[#0a8387]">دسته‌بندی انتخاب‌شده</div>
+                              <h2 className="text-base sm:text-lg font-black text-[#12292c]">
+                                {activeSelectedGroup.title}
+                              </h2>
+                              <p className="text-xs text-[#5f777b]">{activeSelectedGroup.subtitle}</p>
                             </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedGroupSlug('all');
+                              setShowBeautyBookingInsideCategory(false);
+                              pushBrowserPath('/services', ROUTE_TITLES['/services']);
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-[#f2f9f9] hover:bg-[#e3f3f3] border border-[#cde6e6] px-3.5 py-2 text-xs font-extrabold text-[#0b5c60] transition-colors cursor-pointer"
+                          >
+                            <ArrowRight className="w-4 h-4" />
+                            <span>همه دسته‌بندی‌ها</span>
+                          </button>
+                        </div>
+                      ) : (
+                        !serviceSearchQuery.trim() && (
+                          <CategoriesGrid
+                            categories={categories}
+                            selectedCategoryId={selectedGroupSlug}
+                            onSelectCategory={(slug) => {
+                              const picked = categories.find((g) => g.slug === slug);
+                              if (picked?.isComingSoon) {
+                                showToast(`سرویس «${picked.title}» به‌زودی در شهر شما فعال می‌شود.`);
+                                return;
+                              }
+                              setSelectedGroupSlug(slug);
+                              setShowBeautyBookingInsideCategory(slug === 'cat-beauty-personal');
+                              pushBrowserPath(
+                                slug === 'cat-beauty-personal' ? '/beauty' : `/services/${slug}`,
+                                slug === 'cat-beauty-personal' ? ROUTE_TITLES['/beauty'] : ROUTE_TITLES['/services']
+                              );
+                            }}
+                          />
+                        )
+                      )}
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                              {group.subcategories.map((sub) => (
-                                <motion.div
-                                  key={sub.id}
-                                  whileHover={{ y: -3 }}
-                                  className="rounded-3xl bg-white border border-[#dfecec] p-5 flex flex-col justify-between gap-4 hover:shadow-[0_12px_28px_rgba(11,92,96,0.09)] transition-shadow"
-                                >
-                                  <div className="space-y-2">
-                                    <div className="flex items-center justify-between gap-2 text-xs">
-                                      <span className="font-bold text-[#0b5c60]">
-                                        اعزام: {toPersianDigits(sub.etaText)}
-                                      </span>
-                                      <span className="text-[#5f777b]">
-                                        {sub.isLegalMode ? 'حضوری / غیرحضوری' : 'ضمانت کیفیت'}
-                                      </span>
+                      {/* زیرخدمت‌های تخصصی (صرفاً پس از انتخاب دسته‌بندی یا جستجو نمایش داده می‌شوند تا صفحه خلوت و مینیمال بماند) */}
+                      {(activeSelectedGroup || serviceSearchQuery.trim()) && (
+                        <div className="space-y-6">
+                          {filteredServiceCategories.map((group) => (
+                            <section key={group.slug} className="space-y-4">
+                              {(!activeSelectedGroup || group.slug === 'cat-beauty-personal') && (
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  {!activeSelectedGroup && (
+                                    <div>
+                                      <h3 className="text-base sm:text-lg font-black text-[#12292c]">
+                                        {group.title}
+                                      </h3>
+                                      <p className="text-xs text-[#5f777b]">{group.subtitle}</p>
                                     </div>
-                                    <h4 className="font-black text-base text-[#12292c]">{sub.title}</h4>
-                                    <p className="text-xs leading-5 text-[#5f777b]">{sub.subtitle}</p>
-                                  </div>
-
-                                  <div className="pt-3 border-t border-[#eef4f5]">
-                                    <motion.button
-                                      whileTap={{ scale: 0.97 }}
+                                  )}
+                                  {group.slug === 'cat-beauty-personal' && (
+                                    <button
                                       type="button"
-                                      onClick={() => handleOpenSubService(group, sub)}
-                                      className="w-full rounded-xl bg-[#0b5c60] hover:bg-[#0a8387] text-white px-4 py-2.5 text-xs font-extrabold cursor-pointer transition-colors"
+                                      onClick={() => {
+                                        setSelectedGroupSlug('cat-beauty-personal');
+                                        setShowBeautyBookingInsideCategory((prev) => !prev);
+                                      }}
+                                      className="rounded-xl bg-[#0a8387] hover:bg-[#0b5c60] text-white px-3.5 py-2 text-xs font-extrabold cursor-pointer whitespace-nowrap transition-colors"
                                     >
-                                      {group.isComingSoon ? 'اطلاع‌رسانی' : 'درخواست'}
-                                    </motion.button>
-                                  </div>
-                                </motion.div>
-                              ))}
-                            </div>
+                                      {showBeautyBookingInsideCategory
+                                        ? 'بستن تقویم نوبت‌دهی زیبایی بانوان'
+                                        : 'زیرمجموعه زیبایی بانوان (نوبت‌دهی آنلاین)'}
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                                {group.subcategories.map((sub) => {
+                                  const soon = Boolean(sub.isComingSoon || group.isComingSoon);
+                                  return (
+                                    <motion.div
+                                      key={sub.id}
+                                      whileHover={{ y: -3 }}
+                                      className="rounded-3xl bg-white border border-[#dfecec] p-5 flex flex-col justify-between gap-4 hover:shadow-[0_12px_28px_rgba(11,92,96,0.09)] transition-shadow"
+                                    >
+                                      <div className="space-y-2.5">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <ServiceApiIcon
+                                            iconKey={sub.iconKey}
+                                            parentIconKey={group.iconKey}
+                                            iconUrl={sub.iconUrl || group.iconUrl}
+                                            subServiceId={sub.id}
+                                            groupSlug={group.slug}
+                                            colorHex={sub.colorHex || group.colorHex || group.accentHex}
+                                            iconStyle={sub.iconStyle || group.iconStyle}
+                                            size="md"
+                                            alt={sub.title}
+                                          />
+                                          {soon && (
+                                            <span className="px-2.5 py-1 rounded-xl bg-amber-50 text-amber-700 border border-amber-200/80 text-[11px] font-black">
+                                              به‌زودی
+                                            </span>
+                                          )}
+                                        </div>
+                                        <h4 className="font-black text-base text-[#12292c]">{sub.title}</h4>
+                                        <p className="text-xs leading-5 text-[#5f777b]">{sub.subtitle}</p>
+                                      </div>
+
+                                      <div className="pt-3 border-t border-[#eef4f5] space-y-2.5">
+                                        {!soon && (
+                                          <div className="flex items-center justify-between text-xs">
+                                            <span className="text-[#5f777b]">تعرفه پایه مصوب:</span>
+                                            <span className="font-black text-[#0b5c60] tabular-nums">
+                                              از {formatToman(sub.basePriceToman)}
+                                            </span>
+                                          </div>
+                                        )}
+                                        <motion.button
+                                          whileTap={{ scale: 0.97 }}
+                                          type="button"
+                                          onClick={() => handleOpenSubService(group, sub)}
+                                          className={`w-full rounded-xl px-4 py-2.5 text-xs font-extrabold cursor-pointer transition-colors ${
+                                            soon
+                                              ? 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
+                                              : 'bg-[#0b5c60] hover:bg-[#0a8387] text-white'
+                                          }`}
+                                        >
+                                          {soon ? 'به‌زودی فعال می‌شود' : 'ثبت سفارش خدمت'}
+                                        </motion.button>
+                                      </div>
+                                    </motion.div>
+                                  );
+                                })}
+                              </div>
 
                             {/* زیرمجموعه زیبایی بانوان درون دسته «زیبایی و سلامت» */}
                             {group.slug === 'cat-beauty-personal' && showBeautyBookingInsideCategory && (
@@ -1158,9 +1510,10 @@ export default function App() {
                                 />
                               </div>
                             )}
-                          </section>
-                        ))}
-                      </div>
+                            </section>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1168,6 +1521,7 @@ export default function App() {
                   {serviceSubTab === 'store' && (
                     <PartsStoreView
                       dark={false}
+                      loading={initialLoading}
                       isStoreEnabled={isStoreEnabled}
                       parts={storeParts}
                       inquiries={liveState?.partInquiries || []}
@@ -1316,16 +1670,40 @@ export default function App() {
                         `${authUser.firstName || ''} ${authUser.lastName || ''}`.trim() ||
                         authUser.name ||
                         'کاربر تندیس';
-                      if (cleanPhone) {
+                      if (cleanPhone && /^09\d{9}$/.test(cleanPhone)) {
                         setPhone(cleanPhone);
                         setCustomerName(fullName);
                         localStorage.setItem('tandis_phone', cleanPhone);
                         localStorage.setItem('tandis_name', fullName);
+                        localStorage.setItem('tandis_customer_auth_verified', '1');
                         runLiveSync(cleanPhone);
                       }
                       showToast(`خوش آمدید ${fullName}!`);
                       handleNavigate('home');
                     }}
+                  />
+                </motion.div>
+              )}
+
+              {/* صفحه مدیریت و کارشناسان رسمی تندیس */}
+              {activeView === 'management' && (
+                <motion.div key="view-management" {...VIEW_TRANSITION}>
+                  <ManagementExpertsView
+                    dark={false}
+                    supportPhone={supportPhone}
+                    officialSpecialists={liveState?.officialSpecialists || []}
+                    onNavigate={handleNavigate}
+                    onOpenSupport={() => setShowTicketsModal(true)}
+                  />
+                </motion.div>
+              )}
+
+              {/* صفحه مستقل اخبار و مقالات (به‌زودی) */}
+              {activeView === 'news' && (
+                <motion.div key="view-news" {...VIEW_TRANSITION}>
+                  <NewsArticlesView
+                    dark={false}
+                    onNavigateHome={() => handleNavigate('home')}
                   />
                 </motion.div>
               )}
@@ -1356,16 +1734,17 @@ export default function App() {
           isOpen={drawerOpen}
           onClose={() => setDrawerOpen(false)}
           activeNav={headerActiveNav}
-          currentCity={selectedCityName}
-          walletBalance={walletBalance}
-          supportPhone={supportPhone}
-          onSelectNav={handleNavigate}
-          onSelectCategory={handleSelectHomeCategory}
-          onOpenCityModal={() => setShowCityModal(true)}
-          onOpenSupport={() => setShowTicketsModal(true)}
-          user={currentUser}
+          onNavClick={handleNavigate}
           onOpenAuth={() => setShowAuthModal(true)}
+          onOpenSupport={() => setShowTicketsModal(true)}
+          onOpenEditName={() => setShowEditNameModal(true)}
+          onOpenNotifications={phone ? () => setShowNotificationsModal(true) : undefined}
+          unreadNotificationsCount={phone ? unreadNotificationsCount : 0}
           onLogout={handleLogout}
+          selectedCity={selectedCityName}
+          customerPhone={phone}
+          customerName={customerName}
+          supportPhone={supportPhone}
         />
 
         {/* ناوبری پایین موبایل */}
@@ -1401,6 +1780,11 @@ export default function App() {
             setSelectedCityName(c.name);
             localStorage.setItem('tandis_city', c.name);
             showToast(`شهر فعال به ${c.name} (${c.province}) تغییر یافت.`);
+            pushLocalNotification({
+              title: 'تغییر شهر فعال',
+              message: `شهر فعال خدمات شما به ${c.name} (${c.province}) تغییر یافت.`,
+              type: 'SYSTEM',
+            });
           }}
         />
 
@@ -1414,11 +1798,18 @@ export default function App() {
             setCustomerName(name);
             localStorage.setItem('tandis_phone', p);
             localStorage.setItem('tandis_name', name);
+            localStorage.setItem('tandis_customer_auth_verified', '1');
             if (restoredCity && restoredCity.trim()) {
               setSelectedCityName(restoredCity.trim());
               localStorage.setItem('tandis_city', restoredCity.trim());
             }
             showToast(`خوش آمدید ${name}!`);
+            pushLocalNotification({
+              title: 'ورود موفق به حساب تندیس',
+              message: `خوش آمدید ${name}! حساب شما با شماره ${toPersianDigits(p)} فعال شد.`,
+              type: 'AUTH',
+              force: true,
+            });
             runLiveSync(p);
           }}
         />
@@ -1434,11 +1825,17 @@ export default function App() {
             setCustomerName(newName);
             localStorage.setItem('tandis_name', newName);
             showToast('نام کاربری با موفقیت به‌روزرسانی و همگام‌سازی شد.');
+            pushLocalNotification({
+              title: 'ویرایش مشخصات کاربری',
+              message: `نام پروفایل شما به «${newName}» تغییر یافت.`,
+              type: 'SYSTEM',
+            });
             runLiveSync(phone);
           }}
         />
 
         <OrderWizardModal
+          open={Boolean(wizardTarget)}
           dark={false}
           group={wizardTarget?.group || null}
           sub={wizardTarget?.sub || null}
@@ -1450,8 +1847,16 @@ export default function App() {
           onRequireLogin={() => setShowAuthModal(true)}
           onRequestShaparak={openShaparak}
           onClose={() => setWizardTarget(null)}
-          onSubmitted={(msg) => {
-            showToast(msg);
+          onToast={showToast}
+          onSubmitted={() => {
+            const submittedTitle = wizardTarget?.sub?.title || 'خدمت تخصصی تندیس';
+            setWizardTarget(null);
+            pushLocalNotification({
+              title: 'ثبت موفق سفارش جدید',
+              message: `سفارش «${submittedTitle}» در شهر ${selectedCityName} ثبت و برای متخصصان ارسال شد.`,
+              type: 'ORDER',
+              actionNav: 'orders',
+            });
             setActiveView('services');
             setServiceSubTab('orders');
             pushBrowserPath('/orders', ROUTE_TITLES['/orders']);
@@ -1470,6 +1875,12 @@ export default function App() {
           onRequestCancel={(req) => setCancelTarget(req)}
           onPaid={(msg) => {
             showToast(msg);
+            pushLocalNotification({
+              title: 'پرداخت موفق فاکتور',
+              message: msg,
+              type: 'PAYMENT',
+              actionNav: 'orders',
+            });
             runLiveSync(phone);
           }}
         />
@@ -1480,6 +1891,11 @@ export default function App() {
           onClose={() => setCancelTarget(null)}
           onCancelled={(msg) => {
             showToast(msg);
+            pushLocalNotification({
+              title: 'لغو سفارش',
+              message: msg,
+              type: 'ORDER',
+            });
             runLiveSync(phone);
           }}
         />
@@ -1489,8 +1905,20 @@ export default function App() {
           dark={false}
           amountToman={shaparakState.amountToman}
           title={shaparakState.title}
+          phone={phone}
+          customerName={customerName}
+          paymentMeta={shaparakState.paymentMeta}
           onCancel={() => setShaparakState((s) => ({ ...s, open: false }))}
           onSuccess={shaparakState.onSuccess}
+        />
+
+        <NotificationsModal
+          open={Boolean(phone) && showNotificationsModal}
+          dark={false}
+          notifications={mergedNotifications}
+          onClose={() => setShowNotificationsModal(false)}
+          onMarkAllRead={handleMarkAllNotificationsRead}
+          onClearAll={handleClearAllNotifications}
         />
 
         <SupportTicketsModal
@@ -1510,7 +1938,12 @@ export default function App() {
               subject: subj,
               message: msg,
             });
-            showToast('تیکت پشتیبانی ثبت شد.');
+            showToast('پیام شما با موفقیت به پنل مدیریت ارسال شد.');
+            pushLocalNotification({
+              title: 'ارسال تیکت پشتیبانی',
+              message: `تیکت «${subj}» به پشتیبانی و سامانه تندیس مدیریت ارسال شد.`,
+              type: 'SUPPORT',
+            });
             const refreshed = await fetchCustomerTickets(phone);
             setTickets(refreshed);
           }}
@@ -1525,6 +1958,11 @@ export default function App() {
             await rateCompletedRequest(ratingTarget.id, stars, comment);
             setRatingTarget(null);
             showToast('امتیاز شما با موفقیت ثبت شد.');
+            pushLocalNotification({
+              title: 'ثبت امتیاز متخصص',
+              message: `امتیاز ${toPersianDigits(stars)} ستاره شما با موفقیت ثبت شد.`,
+              type: 'ORDER',
+            });
             runLiveSync(phone);
           }}
         />

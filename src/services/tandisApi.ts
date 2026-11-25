@@ -179,6 +179,9 @@ export async function createServiceRequest(req: Partial<ServiceRequestItem>): Pr
     customer_lat: req.customer_lat ?? 30.3392,
     customer_lng: req.customer_lng ?? 48.3043,
     price_toman: req.price_toman ?? 0,
+    is_paid_online: Boolean(req.is_paid_online),
+    ...(req.payment_reference_id ? { payment_reference_id: req.payment_reference_id } : {}),
+    ...(req.is_paid_online ? { customer_quality_tags: 'PAY_STATUS:PAID_ONLINE | IS_PAID_ONLINE:true' } : {}),
     is_urgent: Boolean(req.is_urgent),
     status: 'PENDING_NEARBY',
     created_at_epoch: Date.now(),
@@ -312,7 +315,8 @@ export async function rateCompletedRequest(requestId: string, stars: number, com
 }
 
 export async function fetchCustomerTickets(phone: string): Promise<SupportTicket[]> {
-  const resp = await fetch(`/api/v1/tickets/?user_phone=${encodeURIComponent(phone)}`);
+  if (!phone) return [];
+  const resp = await fetch(`/api/tandis/tickets?phone=${encodeURIComponent(phone)}`);
   if (!resp.ok) return [];
   const data = await resp.json();
   return Array.isArray(data) ? data : [];
@@ -324,19 +328,17 @@ export async function createTicket(payload: {
   subject: string;
   message: string;
 }): Promise<SupportTicket> {
-  const resp = await fetch('/api/v1/tickets/', {
+  const resp = await fetch('/api/tandis/tickets', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       user_phone: payload.user_phone,
       user_name: payload.user_name,
       subject: payload.subject,
-      category: 'پشتیبانی وب‌سایت تندیس',
-      priority: 'HIGH',
-      initial_message: payload.message
+      message: payload.message
     })
   });
-  if (!resp.ok) throw new Error('ارسال تیکت با خطا مواجه شد');
+  if (!resp.ok) throw new Error('ارسال پیام پشتیبانی با خطا مواجه شد');
   return resp.json();
 }
 

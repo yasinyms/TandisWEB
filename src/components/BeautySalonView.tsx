@@ -1,17 +1,19 @@
 import React, { useMemo, useState } from 'react';
 import {
   Calendar,
-  CheckCircle2,
   Clock,
+  CreditCard,
   MapPin,
   Sparkles,
   Star,
   UserCheck,
+  Wallet,
   X
 } from 'lucide-react';
 import { bookBeautyAppointment, cancelBeautyAppointment } from '../services/tandisApi';
 import {
   DEFAULT_BEAUTY_SPECIALISTS,
+  formatToman,
   getRollingSevenJalaliDays,
   toPersianDigits,
   toPurePersianText
@@ -29,7 +31,12 @@ export const BeautySalonView: React.FC<{
   liveSpecialists: BeautySpecialist[];
   bookings: BeautyBooking[];
   onRequireLogin: () => void;
-  onRequestShaparak: (amountToman: number, title: string, onSuccess: () => Promise<void>) => void;
+  onRequestShaparak: (
+    amountToman: number,
+    title: string,
+    onSuccess: () => Promise<void>,
+    paymentMeta?: Record<string, unknown>
+  ) => void;
   onRefresh: () => void;
   onToast: (msg: string) => void;
 }> = ({
@@ -37,9 +44,11 @@ export const BeautySalonView: React.FC<{
   phone,
   customerName,
   walletBalance,
+  mandatoryDepositToman,
   liveSpecialists,
   bookings,
   onRequireLogin,
+  onRequestShaparak,
   onRefresh,
   onToast
 }) => {
@@ -70,8 +79,12 @@ export const BeautySalonView: React.FC<{
         skills: s.skills && s.skills.length > 0 ? s.skills : ['کراتین و احیا', 'کاشت ناخن', 'پاکسازی پوست'],
         tariffs:
           s.tariffs && s.tariffs.length > 0
-            ? s.tariffs
-            : [{ title: 'نوبت تخصصی زیبایی', price_toman: 0, duration_min: 60 }],
+            ? s.tariffs.map((t) => ({
+                ...t,
+                price_toman: Number(t.price_toman || 0) > 0 ? Number(t.price_toman) : 650000,
+                duration_min: Number(t.duration_min || 60)
+              }))
+            : [{ title: 'نوبت تخصصی زیبایی', price_toman: 650000, duration_min: 60 }],
         portfolio_notes: s.portfolio_notes || ['استفاده از مواد استاندارد و ابزار استریل'],
         reviews: s.reviews || [{ customer_name: 'مشتری تندیس', stars: 5, comment: 'برخورد عالی و انجام کار دقیق سر ساعت نوبت.', date_label: 'اخیراً' }],
         days: s.days && s.days.length > 0 ? s.days : calendarDays
@@ -96,33 +109,78 @@ export const BeautySalonView: React.FC<{
     });
   }, [mergedSpecialists, selectedSkill, onlyAvailable, selectedDayIdx]);
 
-  const handleBook = async () => {
+  const selectedTariff = useMemo(() => {
+    const list = activeProfile?.tariffs || [];
+    return list.find((t) => t.title === selectedTariffTitle) || list[0] || { title: 'نوبت زیبایی تندیس', price_toman: 650000, duration_min: 60 };
+  }, [activeProfile, selectedTariffTitle]);
+
+  const effectiveDepositToman = useMemo(() => {
+    const baseDeposit = mandatoryDepositToman > 0 ? mandatoryDepositToman : 300000;
+    const servicePrice = Number(selectedTariff?.price_toman || 0);
+    return servicePrice > 0 ? Math.min(baseDeposit, servicePrice) : baseDeposit;
+  }, [mandatoryDepositToman, selectedTariff]);
+
+  const completeBeautyBooking = async (methodLabel: string, newWalletBalance?: number) => {
+    if (!activeProfile || !selectedSlot) return;
+    await bookBeautyAppointment({
+      specialist_phone: activeProfile.specialist_phone,
+      specialist_name: activeProfile.specialist_name,
+      business_name: activeProfile.business_name,
+      service_title: selectedTariff.title,
+      date_key: activeDay.date_key,
+      jalali_date: activeDay.jalali_date,
+      time_slot: selectedSlot,
+      deposit_toman: effectiveDepositToman,
+      payment_method: methodLabel,
+      customer_phone: phone,
+      customer_name: customerName || 'مشتری تندیس',
+      newWalletBalance
+    });
+    onToast('نوبت زیبایی با پرداخت بیعانه با موفقیت ثبت و تایید شد.');
+    setActiveProfile(null);
+    setSelectedSlot('');
+    setSubTab('appointments');
+    onRefresh();
+  };
+
+  const handleBookWithGateway = () => {
     if (!phone) {
       onRequireLogin();
       return;
     }
     if (!activeProfile || !selectedSlot) return;
 
+    onRequestShaparak(
+      effectiveDepositToman,
+      `بیعانه نوبت زیبایی: ${selectedTariff.title}`,
+      async () => {
+        await completeBeautyBooking('درگاه آنلاین شاپرک');
+      },
+      {
+        kind: 'beauty',
+        phone,
+        customerName: customerName || 'مشتری تندیس',
+        specialistPhone: activeProfile.specialist_phone,
+        specialistName: activeProfile.specialist_name,
+        businessName: activeProfile.business_name,
+        serviceTitle: selectedTariff.title,
+        dateKey: activeDay.date_key,
+        jalaliDate: activeDay.jalali_date,
+        timeSlot: selectedSlot
+      }
+    );
+  };
+
+  const handleBookWithWallet = async () => {
+    if (!phone) {
+      onRequireLogin();
+      return;
+    }
+    if (!activeProfile || !selectedSlot || walletBalance < effectiveDepositToman) return;
+
     setBookingBusy(true);
     try {
-      await bookBeautyAppointment({
-        specialist_phone: activeProfile.specialist_phone,
-        specialist_name: activeProfile.specialist_name,
-        business_name: activeProfile.business_name,
-        service_title: selectedTariffTitle || activeProfile.tariffs?.[0]?.title || 'نوبت زیبایی تندیس',
-        date_key: activeDay.date_key,
-        jalali_date: activeDay.jalali_date,
-        time_slot: selectedSlot,
-        deposit_toman: 0,
-        payment_method: 'درخواست مستقیم',
-        customer_phone: phone,
-        customer_name: customerName || 'مشتری تندیس'
-      });
-      onToast('درخواست نوبت زیبایی ثبت شد.');
-      setActiveProfile(null);
-      setSelectedSlot('');
-      setSubTab('appointments');
-      onRefresh();
+      await completeBeautyBooking('کیف پول تندیس', walletBalance - effectiveDepositToman);
     } finally {
       setBookingBusy(false);
     }
@@ -138,7 +196,7 @@ export const BeautySalonView: React.FC<{
           </div>
           <h2 className="text-xl font-black">تقویم نوبت‌دهی و متخصصان</h2>
           <p className={`text-xs ${mutedCls}`}>
-            ثبت درخواست آنلاین و امکان لغو نوبت در هر زمان
+            رزرو آنلاین با تعرفه شفاف سالن‌ها و امکان لغو نوبت و بازگشت فوری بیعانه در هر زمان
           </p>
         </div>
 
@@ -259,10 +317,15 @@ export const BeautySalonView: React.FC<{
                     <span className="text-[#10B981] font-bold">نقشه تاییدشده</span>
                   </div>
 
-                  <div className="flex items-center justify-between pt-3 border-t border-[#E2EFEF] dark:border-[#26384E]">
-                    <div className="text-xs">
-                      <span className={mutedCls}>نوبت‌های آزاد {activeDay.weekday}: </span>
-                      <strong className="font-black tabular-nums">{toPersianDigits(slots.length)} زمان</strong>
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-[#E2EFEF] dark:border-[#26384E]">
+                    <div className="text-xs space-y-0.5">
+                      <div>
+                        <span className={mutedCls}>نوبت‌های آزاد {activeDay.weekday}: </span>
+                        <strong className="font-black tabular-nums">{toPersianDigits(slots.length)} زمان</strong>
+                      </div>
+                      <div className="font-black text-[#065A52] dark:text-[#14B8A6] tabular-nums">
+                        شروع تعرفه: {formatToman(Math.min(...(spec.tariffs || []).map((t) => t.price_toman || 650000)))}
+                      </div>
                     </div>
                     <button
                       onClick={() => {
@@ -272,7 +335,7 @@ export const BeautySalonView: React.FC<{
                       }}
                       className="rounded-xl bg-[#065A52] hover:bg-[#054943] text-white px-4 py-2 text-xs font-extrabold cursor-pointer"
                     >
-                      مشاهده پروفایل و رزرو
+                      مشاهده تعرفه و رزرو
                     </button>
                   </div>
                 </div>
@@ -360,19 +423,27 @@ export const BeautySalonView: React.FC<{
               </div>
 
               <div className="space-y-2">
-                <div className="text-xs font-black">خدمات سالن:</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="text-xs font-black">انتخاب خدمت و تعرفه سالن:</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {(activeProfile.tariffs || []).map((t) => (
                     <button
                       key={t.title}
                       onClick={() => setSelectedTariffTitle(t.title)}
-                      className={`text-right rounded-2xl border p-3 transition cursor-pointer ${
+                      className={`text-right rounded-2xl border p-3.5 transition cursor-pointer space-y-1 ${
                         selectedTariffTitle === t.title
                           ? 'border-[#065A52] bg-[#065A52]/10'
                           : 'border-[#E2EFEF] dark:border-[#26384E]'
                       }`}
                     >
                       <div className="text-xs font-extrabold">{t.title}</div>
+                      <div className="flex items-center justify-between text-[11px] pt-1">
+                        <span className="font-black text-[#065A52] dark:text-[#14B8A6] tabular-nums">
+                          {formatToman(t.price_toman)}
+                        </span>
+                        <span className={mutedCls}>
+                          مدت: {toPersianDigits(t.duration_min ?? 60)} دقیقه
+                        </span>
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -429,14 +500,35 @@ export const BeautySalonView: React.FC<{
                 </div>
               )}
 
-              <div className="pt-2">
+              <div className="rounded-2xl bg-[#F3F8F8] dark:bg-[#1E2D40] p-4 space-y-1.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className={mutedCls}>مبلغ کل تعرفه انتخابی:</span>
+                  <span className="font-black tabular-nums">{formatToman(selectedTariff.price_toman)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className={mutedCls}>بیعانه رزرو آنلاین (قابل استرداد در صورت لغو):</span>
+                  <span className="font-black text-[#065A52] dark:text-[#14B8A6] tabular-nums">
+                    {formatToman(effectiveDepositToman)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                 <button
                   disabled={bookingBusy || !selectedSlot}
-                  onClick={handleBook}
-                  className="w-full flex items-center justify-center gap-2 rounded-2xl bg-[#065A52] hover:bg-[#054943] disabled:opacity-50 text-white py-3.5 text-xs font-extrabold cursor-pointer"
+                  onClick={handleBookWithGateway}
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-[#065A52] hover:bg-[#054943] disabled:opacity-50 text-white py-3.5 px-4 text-xs font-extrabold cursor-pointer"
                 >
-                  <CheckCircle2 className="w-4 h-4" />
-                  {bookingBusy ? 'در حال ثبت...' : 'درخواست'}
+                  <CreditCard className="w-4 h-4" />
+                  پرداخت آنلاین بیعانه ({formatToman(effectiveDepositToman)})
+                </button>
+                <button
+                  disabled={bookingBusy || !selectedSlot || walletBalance < effectiveDepositToman}
+                  onClick={handleBookWithWallet}
+                  className="flex items-center justify-center gap-2 rounded-2xl border border-[#065A52] text-[#065A52] dark:text-[#14B8A6] hover:bg-[#065A52]/10 disabled:opacity-50 py-3.5 px-4 text-xs font-extrabold cursor-pointer"
+                >
+                  <Wallet className="w-4 h-4" />
+                  {bookingBusy ? 'در حال ثبت...' : `پرداخت از کیف پول (${formatToman(walletBalance)})`}
                 </button>
               </div>
             </div>

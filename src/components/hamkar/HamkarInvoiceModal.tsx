@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   Banknote,
@@ -15,8 +15,10 @@ import {
 import { formatToman, toPersianDigits } from '../../services/tandisDefaults';
 import {
   compressHamkarImageStrict,
+  normalizeShaba,
   submitSpecialistFinalPrice,
   submitSpecialistSettlementRequest,
+  syncSpecialistProfileUpdate,
   toEnglishDigits,
   validateShaba,
 } from '../../services/hamkarApi';
@@ -439,6 +441,7 @@ interface HamkarSettlementModalProps {
   commissionPercent: number;
   completedOrders: HamkarOrderItem[];
   onClose: () => void;
+  onSpecialistUpdated?: (updated: HamkarSpecialistProfile) => void;
   onSuccess: () => void;
 }
 
@@ -449,20 +452,42 @@ export const HamkarSettlementModal: React.FC<HamkarSettlementModalProps> = ({
   commissionPercent,
   completedOrders,
   onClose,
+  onSpecialistUpdated,
   onSuccess,
 }) => {
+  const [shabaInput, setShabaInput] = useState(specialist.shabaNumber || '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const shabaInfo = useMemo(() => validateShaba(specialist.shabaNumber || ''), [specialist.shabaNumber]);
+
+  useEffect(() => {
+    if (open) {
+      setShabaInput(specialist.shabaNumber || '');
+      setError('');
+    }
+  }, [open, specialist.shabaNumber]);
+
+  const shabaInfo = useMemo(() => validateShaba(shabaInput), [shabaInput]);
 
   if (!open) return null;
 
   const handleConfirm = async () => {
+    if (!shabaInfo.valid) {
+      setError('لطفاً شماره شبا ۲۴ رقمی معتبر (شروع با IR) را وارد کنید.');
+      return;
+    }
     setError('');
     setSubmitting(true);
     try {
+      let targetSpec = specialist;
+      const currentNorm = normalizeShaba(specialist.shabaNumber || '');
+      if (shabaInfo.normalized !== currentNorm) {
+        targetSpec = await syncSpecialistProfileUpdate(specialist, {
+          shabaNumber: shabaInfo.normalized,
+        });
+        onSpecialistUpdated?.(targetSpec);
+      }
       await submitSpecialistSettlementRequest({
-        spec: specialist,
+        spec: targetSpec,
         amountToman: balanceToman,
         commissionPercent,
         completedOrders,
@@ -489,20 +514,35 @@ export const HamkarSettlementModal: React.FC<HamkarSettlementModalProps> = ({
           </button>
         </div>
 
-        <div className="rounded-2xl bg-[#f6fbfb] border border-[#dcecec] p-4 space-y-2 text-xs">
-          <div className="flex justify-between">
+        <div className="rounded-2xl bg-[#f6fbfb] border border-[#dcecec] p-4 space-y-3 text-xs">
+          <div className="flex justify-between items-center">
             <span className="text-[#5f777b]">مبلغ قابل تسویه:</span>
             <strong className="text-base font-black text-[#0b5c60] tabular-nums">{formatToman(balanceToman)}</strong>
           </div>
-          <div className="flex justify-between items-center pt-1.5 border-t border-[#e2efef]">
-            <span className="text-[#5f777b]">بانک مقصد:</span>
-            <span className="font-bold text-[#12292c] inline-flex items-center gap-1">
-              <Building2 className="w-3.5 h-3.5 text-[#0b5c60]" />
-              {shabaInfo.valid ? shabaInfo.bankName : 'شبا ثبت نشده'}
-            </span>
-          </div>
-          <div dir="ltr" className="text-[11px] font-black text-center bg-white rounded-xl py-2 border border-[#dcecec] tabular-nums">
-            {shabaInfo.valid ? shabaInfo.normalized : 'ابتدا از تب حساب کاربری شماره شبا ثبت کنید'}
+
+          <div className="space-y-1.5 pt-2 border-t border-[#e2efef]">
+            <label className="text-[11px] font-extrabold text-[#12292c] block">
+              شماره شبای بانکی جهت واریز (IR و ۲۴ رقم):
+            </label>
+            <input
+              dir="ltr"
+              value={shabaInput}
+              onChange={(e) => setShabaInput(normalizeShaba(e.target.value))}
+              placeholder="IR000000000000000000000000"
+              maxLength={26}
+              className="w-full rounded-xl border border-[#cbd5e1] focus:border-[#0b5c60] bg-white px-3.5 py-2.5 text-xs font-black text-center outline-none tabular-nums"
+            />
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-[#5f777b]">بانک مقصد:</span>
+              <span
+                className={`font-bold inline-flex items-center gap-1 ${
+                  shabaInfo.valid ? 'text-emerald-700' : 'text-amber-700'
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                {shabaInfo.valid ? shabaInfo.bankName : 'شماره شبا را کامل وارد کنید'}
+              </span>
+            </div>
           </div>
         </div>
 

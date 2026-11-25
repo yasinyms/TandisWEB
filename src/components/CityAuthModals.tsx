@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
-  CheckCircle2,
+  ArrowRight,
+  Check,
+  ChevronLeft,
   Clock,
-  LocateFixed,
   MapPin,
   Phone,
   RefreshCw,
@@ -12,7 +13,7 @@ import {
   UserCheck,
   X
 } from 'lucide-react';
-import { IRAN_PROVINCES, findNearestIranCity } from '../services/iranProvinces';
+import { ALL_IRAN_CITIES, IRAN_PROVINCES } from '../services/iranProvinces';
 import {
   registerCustomer,
   sendOtp,
@@ -29,138 +30,245 @@ export const CitySelectorModal: React.FC<{
   onClose: () => void;
   onSelectCity: (city: TandisCityInfo) => void;
 }> = ({ open, dark, selectedCityName, onClose, onSelectCity }) => {
-  const [selectedProvince, setSelectedProvince] = useState<string>('همه استان‌ها');
+  // اگر null باشد یعنی در مرحله اول (انتخاب استان) هستیم؛ اگر نام استان باشد، شهرهای داخل آن استان نمایش داده می‌شوند
+  const [activeProvince, setActiveProvince] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const [locating, setLocating] = useState(false);
-  const [locError, setLocError] = useState<string | null>(null);
 
-  const filteredCities = useMemo(() => {
+  useEffect(() => {
+    if (open) {
+      setActiveProvince(null);
+      setQuery('');
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (activeProvince && !query.trim()) {
+          setActiveProvince(null);
+        } else {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, activeProvince, query, onClose]);
+
+  const currentCityObj = useMemo(
+    () => ALL_IRAN_CITIES.find((c) => c.name === selectedCityName) || ALL_IRAN_CITIES[0],
+    [selectedCityName]
+  );
+
+  const selectedProvinceGroup = useMemo(
+    () => (activeProvince ? IRAN_PROVINCES.find((p) => p.province === activeProvince) || null : null),
+    [activeProvince]
+  );
+
+  // در حالت جستجو، مستقیماً شهرهایی که با عبارت مطابقت دارند نمایش داده می‌شوند
+  const searchMatchedCities = useMemo(() => {
     const q = query.trim();
-    const list =
-      selectedProvince === 'همه استان‌ها'
-        ? IRAN_PROVINCES.flatMap((p) => p.cities)
-        : IRAN_PROVINCES.find((p) => p.province === selectedProvince)?.cities || [];
-    if (!q) return list;
-    return list.filter((c) => c.name.includes(q) || c.province.includes(q));
-  }, [selectedProvince, query]);
+    if (!q) return [];
+    const baseList = selectedProvinceGroup ? selectedProvinceGroup.cities : ALL_IRAN_CITIES;
+    return baseList.filter((c) => c.name.includes(q) || c.province.includes(q));
+  }, [query, selectedProvinceGroup]);
 
   if (!open) return null;
 
-  const panelCls = dark ? 'bg-[#152232] text-[#F8FAFC] border-[#26384E]' : 'bg-white text-[#0F2926] border-[#E2EFEF]';
-  const inputCls = dark
-    ? 'bg-[#1E2D40] border-[#26384E] text-white placeholder-[#94A3B8]'
-    : 'bg-[#F8FAFC] border-[#CBD5E1] text-[#0F2926]';
+  const panelCls = dark
+    ? 'bg-[#111c29] text-[#F8FAFC] border-[#243447]'
+    : 'bg-white text-[#12292c] border-[#e2efef]';
+  const borderCls = dark ? 'border-[#243447]' : 'border-[#eef5f5]';
+  const mutedTextCls = dark ? 'text-[#94A3B8]' : 'text-[#647d81]';
 
-  const handleAutoDetectCity = () => {
-    if (!navigator.geolocation) {
-      setLocError('مرورگر شما از موقعیت‌یاب پشتیبانی نمی‌کند.');
-      return;
-    }
-    setLocating(true);
-    setLocError(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const nearest = findNearestIranCity(pos.coords.latitude, pos.coords.longitude);
-        setLocating(false);
-        onSelectCity(nearest);
-        onClose();
-      },
-      () => {
-        setLocating(false);
-        setLocError('دسترسی به موقعیت مکانی داده نشد؛ لطفاً شهر خود را از فهرست انتخاب کنید.');
-      },
-      { timeout: 8000 }
-    );
+  const handlePickCity = (city: TandisCityInfo) => {
+    onSelectCity(city);
+    onClose();
   };
 
+  const isSearching = query.trim().length > 0;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-xs">
-      <div className={`w-full max-w-3xl rounded-3xl border shadow-2xl overflow-hidden flex flex-col max-h-[88vh] ${panelCls}`}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#E2EFEF] dark:border-[#26384E]">
-          <div className="flex items-center gap-2 font-black text-base sm:text-lg">
-            <MapPin className="w-5 h-5 text-[#065A52] dark:text-[#14B8A6]" />
-            انتخاب استان و شهرستان ({toPersianDigits(31)} استان و بیش از {toPersianDigits(350)} شهر)
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-[#091e20]/45 p-0 sm:p-4 backdrop-blur-xs"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className={`w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl border shadow-[0_20px_50px_rgba(11,92,96,0.16)] overflow-hidden flex flex-col max-h-[85vh] ${panelCls}`}
+      >
+        {/* هدر ساده و خلوت */}
+        <div className={`flex items-center justify-between px-5 py-4 border-b ${borderCls}`}>
+          <div className="flex items-center gap-2.5">
+            {selectedProvinceGroup && !isSearching ? (
+              <button
+                type="button"
+                onClick={() => setActiveProvince(null)}
+                className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors cursor-pointer ${
+                  dark ? 'bg-white/10 hover:bg-white/15 text-white' : 'bg-[#f2f9f9] hover:bg-[#e3f2f2] text-[#0b5c60]'
+                }`}
+                aria-label="بازگشت به لیست استان‌ها"
+              >
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <div className="w-8 h-8 rounded-xl bg-[#0b5c60]/10 text-[#0b5c60] flex items-center justify-center shrink-0">
+                <MapPin className="w-4 h-4" />
+              </div>
+            )}
+
+            <div>
+              <h2 className="font-black text-sm sm:text-base">
+                {selectedProvinceGroup && !isSearching
+                  ? `استان ${selectedProvinceGroup.province}`
+                  : 'انتخاب استان و شهر'}
+              </h2>
+              <p className={`text-[11px] ${mutedTextCls}`}>
+                {selectedProvinceGroup && !isSearching
+                  ? 'شهر مورد نظر خود را انتخاب کنید'
+                  : `شهر فعلی شما: ${currentCityObj?.name || selectedCityName}`}
+              </p>
+            </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-black/5 cursor-pointer" aria-label="بستن">
-            <X className="w-5 h-5" />
+
+          <button
+            type="button"
+            onClick={onClose}
+            className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors cursor-pointer ${
+              dark ? 'hover:bg-white/10 text-slate-300' : 'hover:bg-[#f2f9f9] text-[#5f777b]'
+            }`}
+            aria-label="بستن"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="p-4 border-b border-[#E2EFEF] dark:border-[#26384E] space-y-3">
-          <div className="flex flex-col sm:flex-row gap-2.5">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute right-3.5 top-3.5 opacity-55" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="جستجوی نام شهر یا استان (مثلاً آبادان، شیراز، کرج...)"
-                className={`w-full rounded-2xl border pr-10 pl-4 py-2.5 text-sm outline-none ${inputCls}`}
-              />
-            </div>
-            <button
-              onClick={handleAutoDetectCity}
-              disabled={locating}
-              className="flex items-center justify-center gap-2 rounded-2xl bg-[#065A52] hover:bg-[#054943] text-white px-4 py-2.5 text-xs font-extrabold whitespace-nowrap cursor-pointer"
-            >
-              <LocateFixed className="w-4 h-4" />
-              {locating ? 'در حال یافتن شهر شما...' : 'تشخیص خودکار شهر من'}
-            </button>
-          </div>
-          {locError && <div className="text-xs text-red-500 font-bold">{locError}</div>}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-            <button
-              onClick={() => setSelectedProvince('همه استان‌ها')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap cursor-pointer ${
-                selectedProvince === 'همه استان‌ها'
-                  ? 'bg-[#065A52] text-white'
-                  : 'bg-[#F3F8F8] dark:bg-[#1E2D40] opacity-80'
+        {/* جستجوی یکپارچه */}
+        <div className={`px-5 py-3 border-b ${borderCls}`}>
+          <div className="relative flex items-center">
+            <Search className={`w-4 h-4 absolute right-3.5 pointer-events-none ${mutedTextCls}`} />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={
+                selectedProvinceGroup
+                  ? `جستجو در شهرهای ${selectedProvinceGroup.province}...`
+                  : 'جستجوی نام شهر یا استان...'
+              }
+              className={`w-full rounded-xl border pr-10 pl-8 py-2.5 text-xs sm:text-sm outline-none transition-all ${
+                dark
+                  ? 'bg-[#182638] border-[#26384E] text-white placeholder-[#94A3B8] focus:border-[#14B8A6]'
+                  : 'bg-[#f7fbfb] border-[#dceaea] text-[#12292c] placeholder-[#82989c] focus:bg-white focus:border-[#0b5c60]'
               }`}
-            >
-              همه استان‌ها
-            </button>
-            {IRAN_PROVINCES.map((p) => (
+            />
+            {query && (
               <button
-                key={p.province}
-                onClick={() => setSelectedProvince(p.province)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap cursor-pointer ${
-                  selectedProvince === p.province
-                    ? 'bg-[#065A52] text-white'
-                    : 'bg-[#F3F8F8] dark:bg-[#1E2D40] opacity-80'
-                }`}
+                type="button"
+                onClick={() => setQuery('')}
+                className="absolute left-2.5 p-1 rounded-lg hover:bg-black/5 text-[#5f777b] cursor-pointer"
+                aria-label="پاک کردن"
               >
-                {p.province}
+                <X className="w-3.5 h-3.5" />
               </button>
-            ))}
+            )}
           </div>
         </div>
 
-        <div className="p-4 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-          {filteredCities.map((c) => {
-            const active = c.name === selectedCityName;
-            return (
-              <button
-                key={`${c.province}-${c.name}`}
-                onClick={() => {
-                  onSelectCity(c);
-                  onClose();
-                }}
-                className={`text-right p-3 rounded-2xl border transition cursor-pointer ${
-                  active
-                    ? 'border-[#065A52] bg-[#065A52]/10 dark:border-[#14B8A6] dark:bg-[#14B8A6]/15'
-                    : 'border-[#E2EFEF] dark:border-[#26384E] hover:border-[#065A52]/50'
-                }`}
-              >
-                <div className="font-extrabold text-sm flex items-center justify-between gap-1">
-                  <span className="truncate">{c.name}</span>
-                  {active && <CheckCircle2 className="w-4 h-4 text-[#065A52] dark:text-[#14B8A6] shrink-0" />}
+        {/* محتوای اصلی: یا لیست استان‌ها، یا شهرهای داخل استان انتخاب‌شده */}
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+          {/* حالت ۱: جستجوی مستقیم */}
+          {isSearching && (
+            <div className="space-y-1.5">
+              {searchMatchedCities.map((city) => {
+                const active = city.name === selectedCityName;
+                return (
+                  <button
+                    key={`${city.province}-${city.name}`}
+                    type="button"
+                    onClick={() => handlePickCity(city)}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl border text-right transition-all cursor-pointer ${
+                      active
+                        ? 'border-[#0b5c60] bg-[#0b5c60]/8 text-[#0b5c60]'
+                        : dark
+                          ? 'border-transparent hover:bg-white/5 text-slate-200'
+                          : 'border-transparent hover:bg-[#f4fafa] text-[#12292c]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="font-bold text-sm">{city.name}</span>
+                      <span className={`text-xs ${mutedTextCls}`}>({city.province})</span>
+                    </div>
+                    {active && <Check className="w-4 h-4 text-[#0b5c60] shrink-0" />}
+                  </button>
+                );
+              })}
+
+              {searchMatchedCities.length === 0 && (
+                <div className={`text-center py-10 text-xs ${mutedTextCls}`}>
+                  شهری با عبارت «{query}» پیدا نشد.
                 </div>
-                <div className="text-[11px] opacity-65 mt-0.5 truncate">{c.province}</div>
-              </button>
-            );
-          })}
-          {filteredCities.length === 0 && (
-            <div className="col-span-full text-center py-10 text-sm opacity-65">
-              شهری با این عنوان یافت نشد.
+              )}
+            </div>
+          )}
+
+          {/* حالت ۲: مرحله اول — لیست استان‌ها */}
+          {!isSearching && !selectedProvinceGroup && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {IRAN_PROVINCES.map((prov) => {
+                const containsSelectedCity = prov.cities.some((c) => c.name === selectedCityName);
+                return (
+                  <button
+                    key={prov.province}
+                    type="button"
+                    onClick={() => setActiveProvince(prov.province)}
+                    className={`group flex items-center justify-between px-4 py-3 rounded-2xl border text-right transition-all cursor-pointer ${
+                      containsSelectedCity
+                        ? 'border-[#0b5c60]/40 bg-[#f2f9f9]'
+                        : dark
+                          ? 'border-[#243447] bg-[#162334] hover:border-[#14B8A6]/40'
+                          : 'border-[#eef5f5] bg-white hover:border-[#0a8387]/40 hover:bg-[#f9fdfd]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span
+                        className={`w-2 h-2 rounded-full shrink-0 ${
+                          containsSelectedCity ? 'bg-[#0b5c60]' : 'bg-[#cfe3e3] group-hover:bg-[#0a8387]'
+                        }`}
+                      />
+                      <span className="font-bold text-xs sm:text-sm truncate">{prov.province}</span>
+                    </div>
+
+                    <ChevronLeft className={`w-4 h-4 shrink-0 ${mutedTextCls} group-hover:-translate-x-0.5 transition-transform`} />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* حالت ۳: مرحله دوم — شهرهای داخل استان انتخاب‌شده */}
+          {!isSearching && selectedProvinceGroup && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {selectedProvinceGroup.cities.map((city) => {
+                const active = city.name === selectedCityName;
+                return (
+                  <button
+                    key={`${city.province}-${city.name}`}
+                    type="button"
+                    onClick={() => handlePickCity(city)}
+                    className={`flex items-center justify-between gap-2 px-3.5 py-3 rounded-2xl border text-right transition-all cursor-pointer ${
+                      active
+                        ? 'border-[#0b5c60] bg-[#0b5c60] text-white font-black shadow-2xs'
+                        : dark
+                          ? 'border-[#243447] bg-[#162334] hover:border-[#14B8A6]/50 text-slate-200 font-bold'
+                          : 'border-[#e8f2f2] bg-[#fbfefe] hover:bg-[#f2f9f9] hover:border-[#0a8387]/50 text-[#12292c] font-bold'
+                    }`}
+                  >
+                    <span className="text-xs sm:text-sm truncate">{city.name}</span>
+                    {active && <Check className="w-4 h-4 shrink-0" />}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>

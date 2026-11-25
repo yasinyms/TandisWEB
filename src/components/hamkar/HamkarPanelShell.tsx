@@ -12,7 +12,9 @@ import {
   CalendarDays,
   Camera,
   CheckCircle2,
+  ClipboardList,
   Clock,
+  Edit3,
   ExternalLink,
   FileText,
   Headphones,
@@ -26,7 +28,6 @@ import {
   Navigation,
   Phone,
   Power,
-  Radar,
   ReceiptText,
   RefreshCw,
   Search,
@@ -95,6 +96,58 @@ const SUPPORT_PRESET_SUBJECTS = [
   'گزارش خطای فنی یا پیشنهاد',
 ];
 
+function sanitizeDisplayField(raw?: string | null, fallback = ''): string {
+  const s = String(raw || '').trim();
+  if (!s) return fallback;
+  if (
+    /\.(jpe?g|png|webp|gif|bmp|pdf|heic)$/i.test(s) ||
+    /^(shename|shenasname|melli|card|photo|img|doc|file|avatar|selfie|license)[-_]/i.test(s) ||
+    /^data:image\//i.test(s) ||
+    /^https?:\/\//i.test(s) ||
+    /\bapi\b/i.test(s)
+  ) {
+    return fallback;
+  }
+  return s;
+}
+
+const StructuredOrderDetails: React.FC<{ carModel?: string; issueDescription?: string }> = ({
+  carModel,
+  issueDescription,
+}) => {
+  const cleanModel = sanitizeDisplayField(carModel);
+  const rawDesc = String(issueDescription || '').trim();
+  const segments = rawDesc
+    ? rawDesc
+        .split('|')
+        .map((part) => part.trim())
+        .filter(Boolean)
+    : [];
+  if (!cleanModel && segments.length === 0) return null;
+
+  return (
+    <div className="rounded-xl bg-[#f8fbfb] p-3 border border-[#edf4f4] space-y-1.5 text-xs text-[#375155]">
+      {cleanModel && (
+        <div className="font-extrabold text-[#0b5c60]">
+          مشخصات دستگاه / خودرو: <span className="text-[#12292c]">{cleanModel}</span>
+        </div>
+      )}
+      {segments.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {segments.map((seg, idx) => (
+            <span
+              key={`${idx}-${seg.slice(0, 16)}`}
+              className="inline-block rounded-lg bg-white border border-[#e2efef] px-2.5 py-1 text-[11px] font-bold text-[#284246] leading-5"
+            >
+              {seg}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
   initialMode = 'login',
   onBackToSite,
@@ -125,6 +178,10 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
   const [shabaDraft, setShabaDraft] = useState('');
   const [skillModalOpen, setSkillModalOpen] = useState(false);
   const [skillSearch, setSkillSearch] = useState('');
+  const [profileInfoModalOpen, setProfileInfoModalOpen] = useState(false);
+  const [birthDateDraft, setBirthDateDraft] = useState('');
+  const [businessNameDraft, setBusinessNameDraft] = useState('');
+  const [savingProfileInfo, setSavingProfileInfo] = useState(false);
 
   const [busyActionId, setBusyActionId] = useState<string | null>(null);
   const [onlineSwitching, setOnlineSwitching] = useState(false);
@@ -273,14 +330,14 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
     });
   }, [orders, effectiveSpec, activeMission]);
 
-  // اعلان صوتی/بصری سفارش جدید در رادار
+  // اعلان سفارش جدید در لیست سفارش‌ها
   useEffect(() => {
     if (!effectiveSpec?.isOnline) return;
     const currentIds = new Set(radarPendingOrders.map((o) => o.id));
     if (prevRadarIdsRef.current.size > 0) {
       const hasNew = radarPendingOrders.some((o) => !prevRadarIdsRef.current.has(o.id));
       if (hasNew) {
-        showToast('سفارش جدید متناسب با مهارت و شهر شما در رادار ثبت شد!');
+        showToast('سفارش جدید متناسب با مهارت و شهر شما ثبت شد!');
       }
     }
     prevRadarIdsRef.current = currentIds;
@@ -386,7 +443,7 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
       const updated = await syncSpecialistProfileUpdate(effectiveSpec, { isOnline: nextOnline });
       setSpecialist(updated);
       writeStoredHamkarSession({ is_online: nextOnline, cached_specialist: updated });
-      showToast(nextOnline ? 'وضعیت شما آنلاین شد · آماده دریافت سفارش از رادار' : 'وضعیت شما آفلاین شد.');
+      showToast(nextOnline ? 'وضعیت شما آنلاین شد · آماده دریافت سفارش‌های جدید' : 'وضعیت شما آفلاین شد.');
       syncLive(effectiveSpec.phone);
     } catch {
       showToast('خطا در تغییر وضعیت آنلاین/آفلاین.');
@@ -405,7 +462,7 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
       });
       setSpecialist(updated);
       setCityModalOpen(false);
-      showToast(`شهر فعال رادار به «${cityName}» تغییر یافت.`);
+      showToast(`شهر فعال کاری به «${cityName}» تغییر یافت.`);
       syncLive(effectiveSpec.phone);
     } catch {
       showToast('خطا در تغییر شهر فعالیت.');
@@ -452,7 +509,7 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
     setBusyActionId(order.id);
     try {
       await cancelActiveMission(order);
-      showToast('ماموریت لغو شد و سفارش به رادار بازگشت.');
+      showToast('ماموریت لغو شد و سفارش به صف انتظار بازگشت.');
       if (effectiveSpec) await syncLive(effectiveSpec.phone);
     } catch {
       showToast('خطا در لغو ماموریت.');
@@ -520,6 +577,25 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
       syncLive(effectiveSpec.phone);
     } catch {
       showToast('خطا در تغییر مهارت.');
+    }
+  };
+
+  const handleSaveProfileInfo = async () => {
+    if (!effectiveSpec) return;
+    setSavingProfileInfo(true);
+    try {
+      const updated = await syncSpecialistProfileUpdate(effectiveSpec, {
+        birthDate: birthDateDraft.trim(),
+        businessName: businessNameDraft.trim(),
+      });
+      setSpecialist(updated);
+      setProfileInfoModalOpen(false);
+      showToast('تاریخ تولد و عنوان کسب‌وکار شما با موفقیت ذخیره شد.');
+      syncLive(effectiveSpec.phone);
+    } catch {
+      showToast('خطا در ذخیره اطلاعات پروفایل.');
+    } finally {
+      setSavingProfileInfo(false);
     }
   };
 
@@ -617,7 +693,7 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
 
   /* ==================== ناوبری پایین (۵ تب ثابت + تب شرطی زیبایی) ==================== */
   const bottomTabs: Array<{ id: HamkarTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-    { id: 'RADAR', label: 'میز کار', icon: Radar },
+    { id: 'RADAR', label: 'میز کار', icon: ClipboardList },
     { id: 'REVIEWS_PROFILE', label: 'نظرات', icon: Star },
     { id: 'WALLET', label: 'کیف پول', icon: Wallet },
     ...(isBeautySpec ? [{ id: 'BEAUTY_DASHBOARD' as HamkarTab, label: 'زیبایی', icon: Sparkles }] : []),
@@ -627,6 +703,12 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
 
   const activeMissionStep = activeMission ? normalizeMissionStep(activeMission.status) : null;
   const activeMissionPaid = activeMission ? isOrderPaidOnline(activeMission) : false;
+
+  const cleanFullName = sanitizeDisplayField(effectiveSpec.fullName, 'همکار تندیس');
+  const cleanRoleTitle = sanitizeDisplayField(effectiveSpec.roleTitle, 'متخصص رسمی تندیس');
+  const cleanBirthDate = sanitizeDisplayField(effectiveSpec.birthDate);
+  const cleanBusinessName = sanitizeDisplayField(effectiveSpec.businessName);
+  const cleanNationalCode = sanitizeDisplayField(effectiveSpec.nationalCode);
 
   return (
     <div dir="rtl" className="min-h-screen bg-[#f2f8f8] text-[#12292c] flex flex-col">
@@ -638,7 +720,7 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
         </div>
       )}
 
-      {/* هدر مستقل پنل تندیس همکار */}
+      {/* هدر مستقل پنل تندیس همکار (با عکس پروفایل خود همکار) */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-[#dfecec] shadow-2xs">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -651,14 +733,30 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
               <Menu className="w-5 h-5" />
             </button>
 
-            <div className="w-9 h-9 rounded-xl bg-white border border-[#f2a900]/40 p-1 shrink-0 overflow-hidden">
-              <img src={HAMKAR_LOGO_SRC} alt="تندیس همکار" className="w-full h-full object-contain rounded-lg" />
-            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab('ACCOUNT')}
+              title="مشاهده پروفایل و تغییر تصویر"
+              className="w-10 h-10 rounded-xl bg-white border border-[#f2a900]/45 shrink-0 overflow-hidden cursor-pointer flex items-center justify-center"
+            >
+              {effectiveSpec.profilePhoto ? (
+                <img
+                  src={effectiveSpec.profilePhoto}
+                  alt={cleanFullName}
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-[#0b5c60] text-white flex items-center justify-center text-sm font-black">
+                  {cleanFullName.slice(0, 1)}
+                </div>
+              )}
+            </button>
 
             <div className="min-w-0">
-              <div className="text-sm font-black text-[#12292c] truncate">{effectiveSpec.fullName}</div>
+              <div className="text-sm font-black text-[#12292c] truncate">{cleanFullName}</div>
               <div className="text-[11px] font-bold text-[#b47b00] truncate">
-                {effectiveSpec.roleTitle} · {effectiveSpec.serviceCity}
+                {cleanRoleTitle} · {effectiveSpec.serviceCity}
               </div>
             </div>
           </div>
@@ -730,7 +828,7 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
 
             <nav className="flex-1 overflow-y-auto p-3 space-y-1">
               {[
-                { id: 'RADAR' as HamkarTab, label: 'میز کار و رادار زنده', icon: Radar },
+                { id: 'RADAR' as HamkarTab, label: 'میز کار و سفارش‌ها', icon: ClipboardList },
                 { id: 'ACTIVE_MISSION' as HamkarTab, label: 'ماموریت فعال من', icon: Navigation },
                 { id: 'RECENT_REQUESTS' as HamkarTab, label: 'درخواست‌های اخیر و بایگانی', icon: History },
                 ...(isBeautySpec
@@ -817,20 +915,16 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2.5 pt-2 border-t border-white/15 text-center">
-                <div className="rounded-2xl bg-white/10 p-2.5">
-                  <div className="text-[11px] text-white/75">درآمد کل</div>
-                  <div className="text-xs sm:text-sm font-black mt-0.5 tabular-nums">{formatToman(totalNetEarned)}</div>
-                </div>
-                <div className="rounded-2xl bg-white/10 p-2.5">
-                  <div className="text-[11px] text-white/75">کارهای تکمیل‌شده</div>
-                  <div className="text-xs sm:text-sm font-black mt-0.5 tabular-nums">
+              <div className="grid grid-cols-2 gap-2.5 pt-2 border-t border-white/15 text-center">
+                <div className="rounded-2xl bg-white/10 p-3">
+                  <div className="text-[11px] text-white/75 whitespace-nowrap">تکمیل‌شده</div>
+                  <div className="text-xs sm:text-sm font-black mt-0.5 tabular-nums whitespace-nowrap">
                     {toPersianDigits(completedOrders.length)} ماموریت
                   </div>
                 </div>
-                <div className="rounded-2xl bg-white/10 p-2.5">
-                  <div className="text-[11px] text-white/75">امتیاز شما</div>
-                  <div className="text-xs sm:text-sm font-black mt-0.5 tabular-nums">
+                <div className="rounded-2xl bg-white/10 p-3">
+                  <div className="text-[11px] text-white/75 whitespace-nowrap">امتیاز شما</div>
+                  <div className="text-xs sm:text-sm font-black mt-0.5 tabular-nums whitespace-nowrap">
                     {toPersianDigits(avgRating.toFixed(1))} از ۵
                   </div>
                 </div>
@@ -892,7 +986,7 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
                 <div className="rounded-[2rem] bg-white border-2 border-[#0b5c60] shadow-[0_14px_34px_rgba(11,92,96,0.12)] p-5 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
                       <h2 className="text-base font-black text-[#12292c]">
                         ماموریت فعال: {activeMission.service_title}
                       </h2>
@@ -924,7 +1018,7 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
                     ))}
                   </div>
 
-                  <div className="rounded-2xl bg-[#f6fbfb] border border-[#dcecec] p-3.5 text-xs space-y-1.5">
+                  <div className="rounded-2xl bg-[#f6fbfb] border border-[#dcecec] p-3.5 text-xs space-y-2">
                     <div className="flex flex-wrap justify-between gap-2">
                       <span>مشتری: <strong>{activeMission.customer_name}</strong></span>
                       <span dir="ltr" className="font-bold text-[#0b5c60]">{toPersianDigits(activeMission.customer_phone)}</span>
@@ -932,9 +1026,10 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
                     <div className="text-[#375155]">
                       نشانی: {resolveOrderCity(activeMission) || effectiveSpec.serviceCity} · {activeMission.neighborhood} · {activeMission.home_address}
                     </div>
-                    {activeMission.issue_description && (
-                      <div className="text-[#5f777b]">توضیحات: {activeMission.issue_description}</div>
-                    )}
+                    <StructuredOrderDetails
+                      carModel={activeMission.car_model}
+                      issueDescription={activeMission.issue_description}
+                    />
                     {activeMission.price_toman > 0 && (
                       <div className="pt-1.5 border-t border-[#e2efef] flex flex-wrap items-center justify-between gap-2">
                         <span>مبلغ فاکتور: <strong className="text-[#0b5c60] tabular-nums">{formatToman(activeMission.price_toman)}</strong></span>
@@ -1021,12 +1116,12 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
               </div>
             )}
 
-            {/* ===== رادار سفارش‌های در انتظار ===== */}
+            {/* ===== لیست سفارش‌های در انتظار ===== */}
             <section className="space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm sm:text-base font-black text-[#12292c] flex items-center gap-2">
-                  <Radar className="w-4 h-4 text-[#0b5c60]" />
-                  <span>رادار زنده سفارش‌های هم‌مهارت ({effectiveSpec.serviceCity})</span>
+                  <ClipboardList className="w-4 h-4 text-[#0b5c60]" />
+                  <span>سفارش‌های جدید متناسب با مهارت شما ({effectiveSpec.serviceCity})</span>
                 </h2>
                 <button
                   type="button"
@@ -1042,29 +1137,29 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
                   <Power className="w-8 h-8 mx-auto text-slate-400" />
                   <div className="text-sm font-black text-[#12292c]">شما در حالت آفلاین هستید</div>
                   <p className="text-xs text-[#5f777b]">
-                    برای مشاهده و پذیرش سفارش‌های زنده شهر {effectiveSpec.serviceCity}، وضعیت خود را آنلاین کنید.
+                    برای مشاهده و پذیرش سفارش‌های جدید شهر {effectiveSpec.serviceCity}، وضعیت خود را آنلاین کنید.
                   </p>
                   <button
                     type="button"
                     onClick={handleToggleOnline}
                     className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 text-xs font-black cursor-pointer"
                   >
-                    آنلاین شدن و فعال‌سازی رادار
+                    آنلاین شدن و دریافت سفارش
                   </button>
                 </div>
               ) : activeMission ? (
                 <div className="rounded-2xl bg-[#fffdf5] border border-[#f2a900]/40 p-4 text-xs font-bold text-[#8a5b00] flex items-center gap-2">
                   <Lock className="w-4 h-4 shrink-0" />
-                  <span>تا زمان پایان ماموریت فعال فعلی، پذیرش سفارش جدید از رادار قفل است.</span>
+                  <span>تا زمان پایان ماموریت فعال فعلی، پذیرش سفارش جدید غیرفعال است.</span>
                 </div>
               ) : radarPendingOrders.length === 0 ? (
                 <div className="rounded-3xl bg-white border border-[#e2efef] p-8 text-center space-y-2">
                   <div className="w-12 h-12 mx-auto rounded-2xl bg-[#eff8f8] text-[#0b5c60] flex items-center justify-center">
-                    <Radar className="w-6 h-6 animate-pulse" />
+                    <ClipboardList className="w-6 h-6" />
                   </div>
-                  <div className="text-sm font-black text-[#12292c]">در حال پایش زنده رادار...</div>
+                  <div className="text-sm font-black text-[#12292c]">در انتظار سفارش جدید در شهر شما</div>
                   <p className="text-xs text-[#5f777b]">
-                    سفارش‌های جدید در شهر «{effectiveSpec.serviceCity}» متناسب با مهارت «{effectiveSpec.roleTitle}» به‌صورت لحظه‌ای اینجا ظاهر می‌شوند.
+                    سفارش‌های جدید در شهر «{effectiveSpec.serviceCity}» متناسب با مهارت «{cleanRoleTitle}» به‌صورت خودکار اینجا نمایش داده می‌شوند.
                   </p>
                 </div>
               ) : (
@@ -1096,11 +1191,10 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
                           </span>
                         </div>
 
-                        {order.issue_description && (
-                          <p className="text-xs text-[#375155] bg-[#f8fbfb] rounded-xl p-3 border border-[#edf4f4]">
-                            {order.issue_description}
-                          </p>
-                        )}
+                        <StructuredOrderDetails
+                          carModel={order.car_model}
+                          issueDescription={order.issue_description}
+                        />
 
                         {isSelfOrder ? (
                           <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs font-bold text-amber-800 flex items-center gap-2">
@@ -1166,7 +1260,7 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
                   onClick={() => setActiveTab('RADAR')}
                   className="rounded-xl bg-[#0b5c60] text-white px-5 py-2.5 text-xs font-black cursor-pointer"
                 >
-                  بازگشت به رادار زنده
+                  بازگشت به میز کار
                 </button>
               </div>
             ) : (
@@ -1207,12 +1301,10 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
                   </div>
                 </div>
 
-                {activeMission.issue_description && (
-                  <div className="rounded-2xl bg-[#f8fbfb] p-4 border border-[#e2efef] text-xs">
-                    <div className="font-black text-[#12292c] mb-1">شرح مشکل ثبت‌شده مشتری:</div>
-                    <p className="text-[#375155] leading-6">{activeMission.issue_description}</p>
-                  </div>
-                )}
+                <StructuredOrderDetails
+                  carModel={activeMission.car_model}
+                  issueDescription={activeMission.issue_description}
+                />
 
                 {activeMission.client_documents && (
                   <div className="rounded-2xl bg-[#fffdf5] p-4 border border-[#f2a900]/40 text-xs">
@@ -1662,10 +1754,24 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
               </button>
             </div>
 
-            {/* اطلاعات قفل‌شده هویتی */}
-            <div className="rounded-3xl bg-white border border-[#dcecec] p-5 space-y-3">
-              <div className="text-xs font-black text-[#12292c] flex items-center gap-1.5">
-                <Lock className="w-4 h-4 text-[#5f777b]" /> اطلاعات هویتی احرازشده (غیرقابل ویرایش)
+            {/* اطلاعات هویتی و شغلی */}
+            <div className="rounded-3xl bg-white border border-[#dcecec] p-5 space-y-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs font-black text-[#12292c] flex items-center gap-1.5">
+                  <Lock className="w-4 h-4 text-[#5f777b]" /> اطلاعات هویتی و شغلی
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBirthDateDraft(cleanBirthDate);
+                    setBusinessNameDraft(cleanBusinessName);
+                    setProfileInfoModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-xl bg-[#eff8f8] hover:bg-[#dff1f1] text-[#0b5c60] px-3 py-1.5 text-[11px] font-black cursor-pointer"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>ویرایش تاریخ تولد و کسب‌وکار</span>
+                </button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div className="rounded-xl bg-[#f8fbfb] p-3 border border-[#edf4f4]">
@@ -1674,15 +1780,15 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
                 </div>
                 <div className="rounded-xl bg-[#f8fbfb] p-3 border border-[#edf4f4]">
                   <span className="text-[#5f777b]">کد ملی: </span>
-                  <strong dir="ltr">{toPersianDigits(effectiveSpec.nationalCode || 'ثبت‌شده')}</strong>
+                  <strong dir="ltr">{cleanNationalCode ? toPersianDigits(cleanNationalCode) : 'ثبت نشده'}</strong>
                 </div>
                 <div className="rounded-xl bg-[#f8fbfb] p-3 border border-[#edf4f4]">
                   <span className="text-[#5f777b]">تاریخ تولد: </span>
-                  <strong dir="ltr">{toPersianDigits(effectiveSpec.birthDate || 'ثبت‌شده')}</strong>
+                  <strong dir="ltr">{cleanBirthDate ? toPersianDigits(cleanBirthDate) : 'ثبت نشده'}</strong>
                 </div>
                 <div className="rounded-xl bg-[#f8fbfb] p-3 border border-[#edf4f4]">
                   <span className="text-[#5f777b]">کسب‌وکار: </span>
-                  <strong>{effectiveSpec.businessName}</strong>
+                  <strong>{cleanBusinessName || 'ثبت نشده'}</strong>
                 </div>
               </div>
             </div>
@@ -1767,18 +1873,19 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
         commissionPercent={commissionPercent}
         completedOrders={completedOrders}
         onClose={() => setSettlementModalOpen(false)}
+        onSpecialistUpdated={(updated) => setSpecialist(updated)}
         onSuccess={() => {
           showToast('درخواست تسویه آنی به حساب شبای شما ثبت شد.');
           syncLive(effectiveSpec.phone);
         }}
       />
 
-      {/* مودال تغییر شهر رادار */}
+      {/* مودال تغییر شهر فعالیت */}
       {cityModalOpen && (
         <div className="fixed inset-0 z-50 bg-[#12292c]/60 flex items-center justify-center p-4">
           <div className="w-full max-w-md rounded-3xl bg-white p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-black text-[#12292c]">انتخاب شهر فعال رادار</h3>
+              <h3 className="text-sm font-black text-[#12292c]">انتخاب شهر فعال کاری</h3>
               <button type="button" onClick={() => setCityModalOpen(false)} className="cursor-pointer">
                 <X className="w-4 h-4 text-[#5f777b]" />
               </button>
@@ -1890,6 +1997,48 @@ export const HamkarPanelShell: React.FC<HamkarPanelShellProps> = ({
                   </button>
                 ))}
             </div>
+          </div>
+        </div>
+      )}
+      {/* مودال ویرایش تاریخ تولد و نام کسب‌وکار */}
+      {profileInfoModalOpen && (
+        <div className="fixed inset-0 z-50 bg-[#12292c]/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-black text-[#12292c]">ویرایش تاریخ تولد و عنوان کسب‌وکار</h3>
+              <button type="button" onClick={() => setProfileInfoModalOpen(false)} className="cursor-pointer">
+                <X className="w-4 h-4 text-[#5f777b]" />
+              </button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <label className="font-extrabold text-[#12292c] block">تاریخ تولد (مثلاً ۱۳۷۰/۰۵/۱۴)</label>
+                <input
+                  dir="ltr"
+                  value={birthDateDraft}
+                  onChange={(e) => setBirthDateDraft(e.target.value)}
+                  placeholder="1370/05/14"
+                  className="w-full rounded-xl border border-[#cbd5e1] focus:border-[#0b5c60] bg-[#f8fbfb] px-3.5 py-2.5 text-sm font-bold text-left outline-none tabular-nums"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="font-extrabold text-[#12292c] block">عنوان کسب‌وکار یا کارگاه</label>
+                <input
+                  value={businessNameDraft}
+                  onChange={(e) => setBusinessNameDraft(e.target.value)}
+                  placeholder="مثلاً: تعمیرگاه تخصصی لوازم خانگی..."
+                  className="w-full rounded-xl border border-[#cbd5e1] focus:border-[#0b5c60] bg-[#f8fbfb] px-3.5 py-2.5 text-xs font-bold outline-none"
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={savingProfileInfo}
+              onClick={handleSaveProfileInfo}
+              className="w-full rounded-xl bg-[#0b5c60] hover:bg-[#0a8387] disabled:opacity-60 text-white py-3 text-xs font-black cursor-pointer"
+            >
+              {savingProfileInfo ? 'در حال ذخیره...' : 'ذخیره اطلاعات'}
+            </button>
           </div>
         </div>
       )}

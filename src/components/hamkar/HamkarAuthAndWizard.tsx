@@ -695,7 +695,7 @@ export const HamkarAuthAndWizard: React.FC<HamkarAuthAndWizardProps> = ({
                   <h2 className="text-lg font-black text-[#12292c]">پرونده شما در صف بررسی مدیریت است</h2>
                   <p className="text-xs text-[#5f777b] leading-6">
                     {gateSpecialist?.fullName ? `همکار گرامی ${gateSpecialist.fullName}، ` : ''}
-                    مدارک احراز هویت و تخصص شما ثبت شده و در انتظار تایید نهایی واحد عملیات تندیس است. پس از تایید، بلافاصله به رادار سفارش‌ها دسترسی خواهید داشت.
+                    مدارک احراز هویت و تخصص شما ثبت شده و در انتظار تایید نهایی واحد عملیات تندیس است. پس از تایید، بلافاصله به لیست سفارش‌های زنده دسترسی خواهید داشت.
                   </p>
                   {gateSpecialist?.trackingCode && (
                     <div className="inline-flex items-center gap-2 rounded-xl bg-[#f4fafa] border border-[#dcecec] px-4 py-2 text-xs font-black text-[#0b5c60]">
@@ -1119,7 +1119,7 @@ export const HamkarAuthAndWizard: React.FC<HamkarAuthAndWizardProps> = ({
 
                   <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#f4fafa] border border-[#dcecec] p-3.5">
                     <div className="text-xs">
-                      <div className="font-black text-[#12292c]">مختصات جغرافیایی (رادار هوشمند)</div>
+                      <div className="font-black text-[#12292c]">مختصات جغرافیایی محل فعالیت</div>
                       <div dir="ltr" className="text-[11px] text-[#5f777b] tabular-nums text-right">
                         {serviceLat.toFixed(4)}, {serviceLng.toFixed(4)}
                       </div>

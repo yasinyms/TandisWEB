@@ -3,23 +3,7 @@
 
 @font-face {
   font-family: 'Yekan Bakh';
-  src: url('/fonts/YekanBakh-Thin.ttf') format('truetype');
-  font-weight: 100 200;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Yekan Bakh';
-  src: url('/fonts/YekanBakh-Light.ttf') format('truetype');
-  font-weight: 300;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Yekan Bakh';
-  src: url('/fonts/YekanBakh-Regular.ttf') format('truetype');
+  src: url('/fonts/yekan-medium.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -27,26 +11,50 @@
 
 @font-face {
   font-family: 'Yekan Bakh';
-  src: url('/fonts/YekanBakh-Medium.ttf') format('truetype');
-  font-weight: 500 600;
+  src: url('/fonts/yekan-medium.ttf') format('truetype');
+  font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
   font-family: 'Yekan Bakh';
-  src: url('/fonts/YekanBakh-Bold.ttf') format('truetype');
-  font-weight: 700 900;
+  src: url('/fonts/yekan-medium.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Yekan Bakh';
+  src: url('/fonts/yekan-heavy.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Yekan Bakh';
+  src: url('/fonts/yekan-heavy.ttf') format('truetype');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Yekan Bakh';
+  src: url('/fonts/yekan-heavy.ttf') format('truetype');
+  font-weight: 900;
   font-style: normal;
   font-display: swap;
 }
 
 @theme {
-  --font-sans: 'Yekan Bakh', 'Vazirmatn', system-ui, -apple-system, sans-serif;
-  --font-mono: 'Yekan Bakh', 'Vazirmatn', system-ui, -apple-system, sans-serif;
-  --font-headline: 'Yekan Bakh', 'Vazirmatn', sans-serif;
-  --font-body: 'Yekan Bakh', 'Vazirmatn', sans-serif;
-  --font-label: 'Yekan Bakh', 'Vazirmatn', sans-serif;
+  --font-sans: 'Yekan Bakh', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Yekan Bakh', system-ui, -apple-system, sans-serif;
+  --font-headline: 'Yekan Bakh', sans-serif;
+  --font-body: 'Yekan Bakh', sans-serif;
+  --font-label: 'Yekan Bakh', sans-serif;
 }
 
 @layer base {
@@ -56,7 +64,7 @@
   input,
   select,
   textarea {
-    font-family: 'Yekan Bakh', 'Vazirmatn', system-ui, -apple-system, sans-serif;
+    font-family: 'Yekan Bakh', system-ui, -apple-system, sans-serif;
     letter-spacing: 0;
   }
 

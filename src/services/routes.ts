@@ -4,7 +4,9 @@ export type MainView =
   | 'downloads'
   | 'hamkar-panel'
   | 'customer-signup'
-  | 'about';
+  | 'about'
+  | 'management'
+  | 'news';
 
 export type ServiceSubTab = 'catalog' | 'store' | 'tandispay' | 'orders';
 
@@ -21,7 +23,7 @@ export interface ResolvedAppRoute {
 export const ROUTE_TITLES: Record<string, string> = {
   '/': 'تندیس | خدمات در محل، تعمیرات، زیبایی و تندیس‌پی',
   '/app': 'دانلود اپلیکیشن تندیس و تندیس همکار | تندیس',
-  '/services': 'خدمات در محل تندیس | ۳۱ خدمت تخصصی',
+  '/services': 'خدمات در محل تندیس | ۳۲ خدمت تخصصی',
   '/beauty': 'زیبایی بانوان و نوبت‌دهی آنلاین | تندیس',
   '/store': 'فروشگاه قطعات اصلی تندیس | تندیس',
   '/tandispay': 'تندیس‌پی؛ کیف پول و اعتبار اقساطی | تندیس',
@@ -29,7 +31,11 @@ export const ROUTE_TITLES: Record<string, string> = {
   '/hamkar': 'پنل وب تندیس همکار | سامانه متخصصان تندیس',
   '/hamkar/signup': 'ثبت‌نام متخصص و همکار جدید | تندیس همکار',
   '/signup': 'ثبت‌نام عضویت مشتری | تندیس',
-  '/about': 'درباره تندیس و نماد اعتماد | تندیس',
+  '/about': 'درباره تندیس، قوانین و نماد اعتماد | تندیس',
+  '/terms': 'قوانین، شرایط استفاده و رویه عودت وجه | تندیس',
+  '/privacy': 'حریم خصوصی کاربران | تندیس',
+  '/management': 'مدیریت و کارشناسان تندیس | تندیس',
+  '/news': 'اخبار و مقالات تندیس (به‌زودی) | تندیس'
 };
 
 export function parseRouteFromLocation(pathnameRaw: string, hashRaw = ''): ResolvedAppRoute {
@@ -42,11 +48,11 @@ export function parseRouteFromLocation(pathnameRaw: string, hashRaw = ''): Resol
     return {
       activeView: 'hamkar-panel',
       serviceSubTab: 'catalog',
-      selectedGroupSlug: 'all',
+      selectedGroupSlug: 'cat-technical-repairs',
       showBeautyBooking: false,
       hamkarMode: isSignup ? 'signup' : 'login',
       canonicalPath: isSignup ? '/hamkar/signup' : '/hamkar',
-      pageTitle: isSignup ? ROUTE_TITLES['/hamkar/signup'] : ROUTE_TITLES['/hamkar'],
+      pageTitle: isSignup ? ROUTE_TITLES['/hamkar/signup'] : ROUTE_TITLES['/hamkar']
     };
   }
 
@@ -54,11 +60,11 @@ export function parseRouteFromLocation(pathnameRaw: string, hashRaw = ''): Resol
     return {
       activeView: 'downloads',
       serviceSubTab: 'catalog',
-      selectedGroupSlug: 'all',
+      selectedGroupSlug: 'cat-technical-repairs',
       showBeautyBooking: false,
       hamkarMode: 'login',
       canonicalPath: '/app',
-      pageTitle: ROUTE_TITLES['/app'],
+      pageTitle: ROUTE_TITLES['/app']
     };
   }
 
@@ -70,11 +76,11 @@ export function parseRouteFromLocation(pathnameRaw: string, hashRaw = ''): Resol
     return {
       activeView: 'hamkar-panel',
       serviceSubTab: 'catalog',
-      selectedGroupSlug: 'all',
+      selectedGroupSlug: 'cat-technical-repairs',
       showBeautyBooking: false,
       hamkarMode: 'signup',
       canonicalPath: '/hamkar/signup',
-      pageTitle: ROUTE_TITLES['/hamkar/signup'],
+      pageTitle: ROUTE_TITLES['/hamkar/signup']
     };
   }
 
@@ -82,11 +88,35 @@ export function parseRouteFromLocation(pathnameRaw: string, hashRaw = ''): Resol
     return {
       activeView: 'hamkar-panel',
       serviceSubTab: 'catalog',
-      selectedGroupSlug: 'all',
+      selectedGroupSlug: 'cat-technical-repairs',
       showBeautyBooking: false,
       hamkarMode: 'login',
       canonicalPath: '/hamkar',
-      pageTitle: ROUTE_TITLES['/hamkar'],
+      pageTitle: ROUTE_TITLES['/hamkar']
+    };
+  }
+
+  if (cleanPath === '/management' || cleanPath === '/experts') {
+    return {
+      activeView: 'management',
+      serviceSubTab: 'catalog',
+      selectedGroupSlug: 'cat-technical-repairs',
+      showBeautyBooking: false,
+      hamkarMode: 'login',
+      canonicalPath: '/management',
+      pageTitle: ROUTE_TITLES['/management']
+    };
+  }
+
+  if (cleanPath === '/news' || cleanPath === '/articles' || cleanPath === '/blog') {
+    return {
+      activeView: 'news',
+      serviceSubTab: 'catalog',
+      selectedGroupSlug: 'cat-technical-repairs',
+      showBeautyBooking: false,
+      hamkarMode: 'login',
+      canonicalPath: '/news',
+      pageTitle: ROUTE_TITLES['/news']
     };
   }
 
@@ -98,7 +128,7 @@ export function parseRouteFromLocation(pathnameRaw: string, hashRaw = ''): Resol
       showBeautyBooking: true,
       hamkarMode: 'login',
       canonicalPath: '/beauty',
-      pageTitle: ROUTE_TITLES['/beauty'],
+      pageTitle: ROUTE_TITLES['/beauty']
     };
   }
 
@@ -106,11 +136,11 @@ export function parseRouteFromLocation(pathnameRaw: string, hashRaw = ''): Resol
     return {
       activeView: 'services',
       serviceSubTab: 'store',
-      selectedGroupSlug: 'all',
+      selectedGroupSlug: 'cat-technical-repairs',
       showBeautyBooking: false,
       hamkarMode: 'login',
       canonicalPath: '/store',
-      pageTitle: ROUTE_TITLES['/store'],
+      pageTitle: ROUTE_TITLES['/store']
     };
   }
 
@@ -118,11 +148,11 @@ export function parseRouteFromLocation(pathnameRaw: string, hashRaw = ''): Resol
     return {
       activeView: 'services',
       serviceSubTab: 'tandispay',
-      selectedGroupSlug: 'all',
+      selectedGroupSlug: 'cat-technical-repairs',
       showBeautyBooking: false,
       hamkarMode: 'login',
       canonicalPath: '/tandispay',
-      pageTitle: ROUTE_TITLES['/tandispay'],
+      pageTitle: ROUTE_TITLES['/tandispay']
     };
   }
 
@@ -130,11 +160,11 @@ export function parseRouteFromLocation(pathnameRaw: string, hashRaw = ''): Resol
     return {
       activeView: 'services',
       serviceSubTab: 'orders',
-      selectedGroupSlug: 'all',
+      selectedGroupSlug: 'cat-technical-repairs',
       showBeautyBooking: false,
       hamkarMode: 'login',
       canonicalPath: '/orders',
-      pageTitle: ROUTE_TITLES['/orders'],
+      pageTitle: ROUTE_TITLES['/orders']
     };
   }
 
@@ -142,11 +172,11 @@ export function parseRouteFromLocation(pathnameRaw: string, hashRaw = ''): Resol
     return {
       activeView: 'services',
       serviceSubTab: 'catalog',
-      selectedGroupSlug: 'all',
+      selectedGroupSlug: 'cat-technical-repairs',
       showBeautyBooking: false,
       hamkarMode: 'login',
       canonicalPath: '/services',
-      pageTitle: ROUTE_TITLES['/services'],
+      pageTitle: ROUTE_TITLES['/services']
     };
   }
 
@@ -155,11 +185,11 @@ export function parseRouteFromLocation(pathnameRaw: string, hashRaw = ''): Resol
     return {
       activeView: 'services',
       serviceSubTab: 'catalog',
-      selectedGroupSlug: slug || 'all',
+      selectedGroupSlug: slug || 'cat-technical-repairs',
       showBeautyBooking: slug === 'cat-beauty-personal',
       hamkarMode: 'login',
       canonicalPath: slug ? `/services/${slug}` : '/services',
-      pageTitle: ROUTE_TITLES['/services'],
+      pageTitle: ROUTE_TITLES['/services']
     };
   }
 
@@ -167,34 +197,36 @@ export function parseRouteFromLocation(pathnameRaw: string, hashRaw = ''): Resol
     return {
       activeView: 'customer-signup',
       serviceSubTab: 'catalog',
-      selectedGroupSlug: 'all',
+      selectedGroupSlug: 'cat-technical-repairs',
       showBeautyBooking: false,
       hamkarMode: 'login',
       canonicalPath: '/signup',
-      pageTitle: ROUTE_TITLES['/signup'],
+      pageTitle: ROUTE_TITLES['/signup']
     };
   }
 
-  if (cleanPath === '/about' || cleanPath === '/contact') {
+  if (cleanPath === '/about' || cleanPath === '/contact' || cleanPath === '/terms' || cleanPath === '/privacy') {
+    const canonicalPath =
+      cleanPath === '/terms' ? '/terms' : cleanPath === '/privacy' ? '/privacy' : '/about';
     return {
       activeView: 'about',
       serviceSubTab: 'catalog',
-      selectedGroupSlug: 'all',
+      selectedGroupSlug: 'cat-technical-repairs',
       showBeautyBooking: false,
       hamkarMode: 'login',
-      canonicalPath: '/about',
-      pageTitle: ROUTE_TITLES['/about'],
+      canonicalPath,
+      pageTitle: ROUTE_TITLES[canonicalPath]
     };
   }
 
   return {
     activeView: 'home',
     serviceSubTab: 'catalog',
-    selectedGroupSlug: 'all',
+    selectedGroupSlug: 'cat-technical-repairs',
     showBeautyBooking: false,
     hamkarMode: 'login',
     canonicalPath: '/',
-    pageTitle: ROUTE_TITLES['/'],
+    pageTitle: ROUTE_TITLES['/']
   };
 }
 
