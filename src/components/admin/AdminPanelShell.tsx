@@ -8,6 +8,7 @@ import {
   Eye,
   EyeOff,
   FileCheck2,
+  Globe,
   Image as ImageIcon,
   Landmark,
   Layers,
@@ -24,7 +25,8 @@ import {
   Sparkles,
   UserCheck,
   Users,
-  X
+  X,
+  BarChart3
 } from 'lucide-react';
 import {
   type AdminLiveAlert,
@@ -52,10 +54,13 @@ import {
   AdminSettlementsView
 } from './AdminCatalogBeautyFinance';
 import {
+  AdminAiContentView,
   AdminExpertsView,
   AdminNotificationsView,
+  AdminSeoView,
   AdminSlidersView,
   AdminTicketsView,
+  AdminVisitorsAnalyticsView,
   AdminViolationsView
 } from './AdminCommsAndSystem';
 
@@ -108,6 +113,9 @@ const SIDEBAR_ITEMS: SidebarNavItem[] = [
     badge: (s) => s.stats.openTicketsCount
   },
   { id: 'sliders', label: 'اسلایدر و بنرها', icon: ImageIcon },
+  { id: 'seo', label: 'سئو و ثبت در گوگل', icon: Globe },
+  { id: 'ai_content', label: 'هوش مصنوعی تولید محتوا', icon: Sparkles },
+  { id: 'visitors', label: 'گزارش بازدیدها و ترافیک', icon: BarChart3 },
   {
     id: 'violations',
     label: 'شکایات و تخلفات',
@@ -670,6 +678,30 @@ export const AdminPanelShell: React.FC<AdminPanelShellProps> = ({ onBackToSite }
               )}
               {activeModule === 'sliders' && (
                 <AdminSlidersView
+                  data={liveState}
+                  globalQuery={globalQuery}
+                  onRefresh={() => syncLiveState(true)}
+                  onToast={showToast}
+                />
+              )}
+              {activeModule === 'seo' && (
+                <AdminSeoView
+                  data={liveState}
+                  globalQuery={globalQuery}
+                  onRefresh={() => syncLiveState(true)}
+                  onToast={showToast}
+                />
+              )}
+              {activeModule === 'ai_content' && (
+                <AdminAiContentView
+                  data={liveState}
+                  globalQuery={globalQuery}
+                  onRefresh={() => syncLiveState(true)}
+                  onToast={showToast}
+                />
+              )}
+              {activeModule === 'visitors' && (
+                <AdminVisitorsAnalyticsView
                   data={liveState}
                   globalQuery={globalQuery}
                   onRefresh={() => syncLiveState(true)}

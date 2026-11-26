@@ -813,7 +813,7 @@ export const DEFAULT_SLIDERS: PromoSlide[] = [
     title: 'پوشش سراسری تندیس در ۳۱ استان کشور',
     subtitle: 'اعزام فوری متخصصین تاییدشده با گارانتی کتبی و تعرفه شفاف',
     badge: 'پوشش سراسری',
-    image_url: '/src/assets/images/media-2.jpg',
+    image_url: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=1200&q=80',
     target_category_slug: 'cat-automotive-mechanic',
     duration_seconds: 6
   },
@@ -822,7 +822,7 @@ export const DEFAULT_SLIDERS: PromoSlide[] = [
     title: 'تسهیلات اعتباری ۲۰ تا ۳۰۰ میلیون تومانی تندیس‌پی',
     subtitle: 'محاسبه پلکانی اقساط ۳ تا ۲۴ ماهه و بارگذاری برخط مدارک',
     badge: 'اعتبار فوری',
-    image_url: '/src/assets/images/media-1.jpg',
+    image_url: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80',
     target_category_slug: 'tandispay',
     duration_seconds: 6
   },
@@ -831,7 +831,7 @@ export const DEFAULT_SLIDERS: PromoSlide[] = [
     title: 'خدمات تخصصی زیبایی و سلامت تندیس',
     subtitle: 'تقویم زنده ۷ روز آینده، پروفایل کامل متخصصان و رزرو آنلاین مطمئن',
     badge: 'زیبایی و سلامت',
-    image_url: '/src/assets/images/media-3.jpg',
+    image_url: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=1200&q=80',
     target_category_slug: 'cat-beauty-personal',
     duration_seconds: 6
   }

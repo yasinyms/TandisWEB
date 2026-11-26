@@ -1,8 +1,30 @@
 import React, { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
+import { onLCP, onCLS, onINP, onFCP, onTTFB } from 'web-vitals';
 import './index.css';
 import App from './App';
+
+// سنجش زنده Core Web Vitals با کتابخانه web-vitals
+if (typeof window !== 'undefined') {
+  const reportWebMetric = (metric: { name: string; value: number; rating: string; delta: number }) => {
+    try {
+      const existing = JSON.parse(localStorage.getItem('tandis_web_vitals') || '{}');
+      existing[metric.name] = {
+        value: metric.value,
+        rating: metric.rating,
+        delta: metric.delta,
+        timestamp: Date.now()
+      };
+      localStorage.setItem('tandis_web_vitals', JSON.stringify(existing));
+    } catch {}
+  };
+  onLCP(reportWebMetric);
+  onCLS(reportWebMetric);
+  onINP(reportWebMetric);
+  onFCP(reportWebMetric);
+  onTTFB(reportWebMetric);
+}
 
 // در محیط پیش‌نمایش (run.app / localhost)، سرویس‌ورکرهای قدیمی کش‌شده را پاک کن تا نسخه جدید همیشه بدون خطا بالا بیاید
 const isPreviewHost =

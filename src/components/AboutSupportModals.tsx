@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ArrowRight,
   Bell,
@@ -338,9 +338,10 @@ export const ManagementExpertsView: React.FC<{
   );
 };
 
-interface EducationalArticle {
+export interface EducationalArticle {
   id: string;
   slug: string;
+  contentType?: 'ARTICLE' | 'TUTORIAL';
   title: string;
   seoSubtitle: string;
   category: string;
@@ -362,7 +363,7 @@ interface EducationalArticle {
   }>;
 }
 
-const EDUCATIONAL_SEO_ARTICLES: EducationalArticle[] = [
+export const EDUCATIONAL_SEO_ARTICLES: EducationalArticle[] = [
   {
     id: 'art-1',
     slug: 'air-conditioner-maintenance-guide',
@@ -645,6 +646,123 @@ const EDUCATIONAL_SEO_ARTICLES: EducationalArticle[] = [
           'بله، شست‌وشو و ضدعفونی هر دو طرف تشک خوشخواب یک‌نفره و دونفره با همان دستگاه وکیوم صنعتی و مواد ضدحساسیت در محل منزل انجام می‌گیرد.'
       }
     ]
+  },
+  {
+    id: 'art-6',
+    slug: 'wall-boiler-troubleshooting-tutorial',
+    contentType: 'TUTORIAL',
+    title: 'آموزش گام‌به‌گام عیب‌یابی، هواگیری و سرویس پکیج دیواری؛ راهنمای کامل تنظیم فشار بار و رسوب‌زدایی مبدل',
+    seoSubtitle: 'آموزش عملی تنظیم فشار استاندارد ۱.۵ بار، هواگیری رادیاتورها، رفع افت فشار و علت سرد و گرم شدن آب مصرفی پکیج',
+    category: 'آموزش‌های گام‌به‌گام',
+    readingTimeMin: 8,
+    publishDateJalali: 'آذر ۱۴۰۴',
+    author: 'آکادمی آموزش فنی تندیس',
+    coverImage: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1200&q=85',
+    keywords: ['آموزش تعمیر پکیج دیواری', 'هواگیری رادیاتور و پکیج', 'تنظیم فشار بار پکیج', 'رسوب زدایی پکیج در محل'],
+    summary:
+      'افت فشار بار پکیج، گرم نشدن رادیاتورها و نوسان دمای آب گرم حمام از رایج‌ترین مشکلات پکیج‌های دیواری هستند که با یادگیری اصول هواگیری و تنظیم شیر پرکن می‌توانید بخش مهمی از آن‌ها را مدیریت کنید.',
+    keyTakeaways: [
+      'فشار استاندارد عقربه بارومتر پکیج باید همیشه بین ۱.۲ تا ۱.۵ بار (در حالت سرد) تنظیم باشد.',
+      'سرد بودن نیمه بالایی رادیاتور نشانه وجود حبس هوا در مدار است و با آچار هواگیری در ۲ دقیقه برطرف می‌شود.',
+      'نوسان دمای آب گرم مصرفی (سرد و گرم شدن در حمام) معمولاً ناشی از رسوب گرفتن مبدل ثانویه یا خرابی سنسور NTC است.'
+    ],
+    sections: [
+      {
+        heading: 'گام اول: آموزش تنظیم فشار بار پکیج دیواری با شیر پرکن',
+        paragraphs: [
+          'زمانی که فشار آب مدار گرمایش به زیر ۰.۸ بار می‌رسد، سنسور پرشر سوئیچ آب دستور توقف پکیج را صادر کرده و کد خطای افت فشار نمایش داده می‌شود. برای تنظیم مجدد فشار، ابتدا مطمئن شوید دستگاه خنک است.',
+          'شیر پرکن (که معمولاً یک ولوم مشکی یا آبی‌رنگ در زیر پکیج است) را به آرامی خلاف جهت عقربه‌های ساعت باز کنید و به عقربه فشارسنج نگاه کنید. به محض رسیدن عقربه به عدد ۱.۵ بار، شیر پرکن را کاملاً ببندید تا از باز شدن شیر اطمینان ۳ بار و آب‌ریزی جلوگیری شود.'
+        ]
+      },
+      {
+        heading: 'گام دوم: آموزش هواگیری اصولی رادیاتورها و حوله‌خشک‌کن',
+        paragraphs: [
+          'وجود حباب هوا در مدار شوفاژ باعث صدای شرشر آب در لوله‌ها و گرم نشدن یکنواخت پره‌های رادیاتور می‌شود. مراحل هواگیری استاندارد به شرح زیر است:'
+        ],
+        bullets: [
+          'پکیج را موقتاً خاموش کنید تا پمپ سیرکولاسیون متوقف شود و هوا در بالاترین نقطه رادیاتور جمع گردد.',
+          'با آچار مخصوص هواگیری یا پیچ‌گوشتی دوسو، پیچ هواگیری بالای رادیاتور را نیم‌دور باز کنید تا صدای خروج هوا شنیده شود.',
+          'به محض اینکه جریان آب یکنواخت و بدون حباب خارج شد، پیچ را ببندید.',
+          'در پایان، فشار بارومتر پکیج را دوباره چک کنید و در صورت افت، با شیر پرکن روی ۱.۵ بار برگردانید.'
+        ]
+      },
+      {
+        heading: 'گام سوم: چه زمانی اسیدشویی مبدل و اعزام تعمیرکار ضروری است؟',
+        paragraphs: [
+          'اگر فشار آب گرم خروجی کم شده یا آب در حمام مدام سرد و گرم می‌شود، مبدل ثانویه پکیج دچار گرفتگی آهکی شده است. اسیدشویی مبدل با پمپ مخصوص، تنظیم شعله برد و تست منبع انبساط نیازمند ابزار تخصصی است که تکنسین‌های مجاز تندیس در کمتر از ۱ ساعت در محل شما انجام می‌دهند.'
+        ]
+      }
+    ],
+    faqs: [
+      {
+        question: 'چرا فشار پکیج هر چند روز یک‌بار افت می‌کند؟',
+        answer:
+          'افت مکرر فشار پکیج نشانه وجود نشتی ریز در شیرهای رادیاتور، کلکتور یا سوراخ شدن دیافراگم منبع انبساط پکیج است که توسط متخصص تاسیسات تندیس نشت‌یابی و رفع می‌شود.'
+      },
+      {
+        question: 'آیا سرویس پکیج ایران‌رادیاتور و بوتان در محل انجام می‌شود؟',
+        answer:
+          'بله، تعمیرکاران مجاز تندیس سرویس کامل، اسیدشویی، تعمیر برد و تعویض قطعات پکیج‌های ایران‌رادیاتور، بوتان، لورچ و برندهای خارجی را با ضمانت در محل انجام می‌دهند.'
+      }
+    ]
+  },
+  {
+    id: 'art-7',
+    slug: 'skincare-facial-and-nail-care-tutorial',
+    contentType: 'TUTORIAL',
+    title: 'آموزش تخصصی پاکسازی پوست، فیشیال و مراقبت از ناخن؛ استانداردهای بهداشتی کلینیک زیبایی تندیس',
+    seoSubtitle: 'آموزش مراحل فیشیال تخصصی، آبرسانی عمقی پوست و نکات طلایی افزایش دوام کاشت و لمینت ناخن بدون آسیب به صدف ناخن',
+    category: 'زیبایی و سلامت',
+    readingTimeMin: 6,
+    publishDateJalali: 'آذر ۱۴۰۴',
+    author: 'آکادمی زیبایی و سلامت تندیس',
+    coverImage: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=1200&q=85',
+    keywords: ['آموزش فیشیال و پاکسازی پوست', 'کاشت و ترمیم ناخن تندیس', 'روتین مراقبت پوست', 'رزرو متخصص زیبایی'],
+    summary:
+      'رعایت اصول علمی در فیشیال پوست و خدمات ناخن، مرز میان شادابی و سلامت بافت پوست و ناخن با آسیب‌های قارچی یا التهابی است. در این آموزش استانداردهای کلینیکی تندیس را مرور می‌کنیم.',
+    keyTakeaways: [
+      'فیشیال استاندارد شامل ۶ مرحله پاکسازی، لایه‌برداری آنزیمی، تخلیه کومدون، سرم‌تراپی، ماسک تخصصی و نوردرمانی است.',
+      'در خدمات ناخن، سوهان‌کشی بیش از حد صدف ناخن طبیعی ممنوع است و استریل بودن ابزار فلزی اولویت اول سلامت است.',
+      'تمامی متخصصان زیبایی تندیس دارای پرونده مهارت‌های تاییدشده در سرور هستند.'
+    ],
+    sections: [
+      {
+        heading: '۱. آموزش مراحل ۶ گانه فیشیال و آبرسانی تخصصی پوست',
+        paragraphs: [
+          'پوست صورت به دلیل تماس مداوم با آلودگی هوا، ضدآفتاب و مواد آرایشی دچار انسداد منافذ و کدر شدن لایه شاخی می‌شود. در فیشیال تخصصی، هدف تنها پاک کردن سطح پوست نیست بلکه احیای سد دفاعی و آبرسانی به لایه اپیدرم است:'
+        ],
+        bullets: [
+          'پاکسازی دوفازی (Double Cleansing) و تنظیم pH پوست با تونر فاقد الکل.',
+          'لایه‌برداری ملایم آنزیمی یا میکرودرم برای حذف سلول‌های مرده بدون التهاب.',
+          'بخور اوزون و تخلیه بهداشتی جوش‌های سرسیاه (کومدون‌ها) با دستگاه اولتراسونیک.',
+          'جذب سرم‌های هیالورونیک اسید، ویتامین C و پپتیدها به همراه ماسک جلبک یا هیدروژلی.'
+        ]
+      },
+      {
+        heading: '۲. اصول مراقبت از کاشت، لمینت و ژلیش ناخن',
+        paragraphs: [
+          'برای جلوگیری از هوا گرفتن کاشت ناخن یا شکنندگی صدف ناخن، ترمیم دوره‌ای باید هر ۳ تا ۴ هفته یک‌بار انجام شود. استفاده از روغن کوتیکول در شب و پوشیدن دستکش هنگام کار با شوینده‌های خانگی، دوام ژلیش و لمینت را دو برابر می‌کند.'
+        ]
+      },
+      {
+        heading: '۳. انتخاب متخصص بر اساس مهارت‌های واقعی در تندیس',
+        paragraphs: [
+          'در بخش زیبایی و سلامت تندیس، هر متخصص ممکن است در چند رشته (مانند فیشیال پوست، میکاپ عروس، کاشت ناخن یا کراتین مو) مهارت داشته باشد. شما می‌توانید مهارت‌های دقیق هر فرد را که مستقیماً از سرور دریافت می‌شود بررسی و نوبت خود را ثبت کنید.'
+        ]
+      }
+    ],
+    faqs: [
+      {
+        question: 'فاصله زمانی استاندارد بین جلسات فیشیال پوست چقدر است؟',
+        answer:
+          'چرخه نوسازی سلول‌های پوست حدود ۲۸ روز است؛ بنابراین انجام فیشیال تخصصی ماهی یک‌بار بهترین نتیجه را برای شفافیت و جوان‌سازی پوست دارد.'
+      },
+      {
+        question: 'چگونه متخصص زیبایی مناسب خود را در تندیس پیدا کنیم؟',
+        answer:
+          'کافی است وارد بخش زیبایی و سلامت شوید، مهارت موردنظر خود را فیلتر کنید و از میان متخصصان احراز هویت‌شده، فرد دلخواه را بر اساس مهارت‌ها و امتیازات انتخاب نمایید.'
+      }
+    ]
   }
 ];
 
@@ -654,23 +772,143 @@ export const NewsArticlesView: React.FC<{
   onOrderServiceClick?: () => void;
 }> = ({ dark, onNavigateHome, onOrderServiceClick }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('همه مقالات');
-  const [activeArticleId, setActiveArticleId] = useState<string | null>(null);
+  const [activeArticleId, setActiveArticleId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    const slugParam = params.get('article');
+    if (slugParam) {
+      const found = EDUCATIONAL_SEO_ARTICLES.find((a) => a.slug === slugParam || a.id === slugParam);
+      if (found) return found.id;
+    }
+    return null;
+  });
 
   const cardCls = dark
     ? 'bg-[#152232] border-[#26384E] text-[#F8FAFC]'
     : 'bg-white border-[#e2efef] text-[#12292c]';
   const mutedCls = dark ? 'text-[#94A3B8]' : 'text-[#527371]';
 
-  const categories = ['همه مقالات', 'فنی و لوازم خانگی', 'امداد و خودرو', 'زیبایی و سلامت', 'نظافت و منزل'];
+  const categories = [
+    'همه مقالات',
+    'آموزش‌های گام‌به‌گام',
+    'فنی و لوازم خانگی',
+    'امداد و خودرو',
+    'زیبایی و سلامت',
+    'نظافت و منزل'
+  ];
 
   const filteredArticles =
     selectedCategory === 'همه مقالات'
       ? EDUCATIONAL_SEO_ARTICLES
+      : selectedCategory === 'آموزش‌های گام‌به‌گام'
+      ? EDUCATIONAL_SEO_ARTICLES.filter((a) => a.category === 'آموزش‌های گام‌به‌گام' || a.contentType === 'TUTORIAL')
       : EDUCATIONAL_SEO_ARTICLES.filter((a) => a.category === selectedCategory);
 
   const activeArticle = activeArticleId
     ? EDUCATIONAL_SEO_ARTICLES.find((a) => a.id === activeArticleId) || null
     : null;
+
+  // تزریق خودکار Schema.org (BlogPosting + FAQPage + HowTo) و متاتگ‌های سئو برای مقالات و آموزش‌ها
+  useEffect(() => {
+    const prevTitle = document.title;
+    const metaDescEl = document.querySelector('meta[name="description"]');
+    const prevDesc = metaDescEl?.getAttribute('content') || '';
+    const scriptId = 'tandis-articles-dynamic-schema';
+
+    let schemaEl = document.getElementById(scriptId) as HTMLScriptElement | null;
+    if (!schemaEl) {
+      schemaEl = document.createElement('script');
+      schemaEl.id = scriptId;
+      schemaEl.type = 'application/ld+json';
+      document.head.appendChild(schemaEl);
+    }
+
+    if (activeArticle) {
+      document.title = `${activeArticle.title} | مجله و آموزش‌های تندیس (tandiis.com)`;
+      if (metaDescEl) {
+        metaDescEl.setAttribute('content', `${activeArticle.seoSubtitle} - ${activeArticle.summary}`);
+      }
+      const articleUrl = `https://tandiis.com/news?article=${activeArticle.slug}`;
+      const schemaPayload = {
+        '@context': 'https://schema.org',
+        '@graph': [
+          {
+            '@type': activeArticle.contentType === 'TUTORIAL' ? ['BlogPosting', 'HowTo'] : 'BlogPosting',
+            '@id': `${articleUrl}#article`,
+            mainEntityOfPage: articleUrl,
+            headline: activeArticle.title,
+            description: activeArticle.summary,
+            image: activeArticle.coverImage,
+            inLanguage: 'fa-IR',
+            author: {
+              '@type': 'Organization',
+              name: activeArticle.author
+            },
+            publisher: {
+              '@type': 'Organization',
+              name: 'تندیس | tandiis.com',
+              logo: {
+                '@type': 'ImageObject',
+                url: 'https://tandiis.com/assets/aistudio/WhatsApp_Image_2026-11-15_at_17.37.57_b48837a8.jpeg'
+              }
+            },
+            keywords: activeArticle.keywords.join(', '),
+            ...(activeArticle.contentType === 'TUTORIAL'
+              ? {
+                  name: activeArticle.title,
+                  step: activeArticle.sections.map((sec, idx) => ({
+                    '@type': 'HowToStep',
+                    position: idx + 1,
+                    name: sec.heading,
+                    text: sec.paragraphs.join(' ')
+                  }))
+                }
+              : {})
+          },
+          {
+            '@type': 'FAQPage',
+            '@id': `${articleUrl}#faq`,
+            mainEntity: activeArticle.faqs.map((f) => ({
+              '@type': 'Question',
+              name: f.question,
+              acceptedAnswer: {
+                '@type': 'Answer',
+                text: f.answer
+              }
+            }))
+          }
+        ]
+      };
+      schemaEl.textContent = JSON.stringify(schemaPayload);
+    } else {
+      document.title = 'مجله آموزشی، مقالات و آموزش‌های تخصصی تندیس | tandiis.com';
+      if (metaDescEl) {
+        metaDescEl.setAttribute(
+          'content',
+          'مقالات آموزشی سئو شده و آموزش‌های گام‌به‌گام نگهداری لوازم خانگی، سرویس کولر گازی، عیب‌یابی پکیج، چکاپ خودرو و مراقبت‌های زیبایی و سلامت در تندیس.'
+        );
+      }
+      const listSchema = {
+        '@context': 'https://schema.org',
+        '@type': 'ItemList',
+        name: 'فهرست مقالات و آموزش‌های تخصصی تندیس (tandiis.com)',
+        itemListElement: EDUCATIONAL_SEO_ARTICLES.map((art, idx) => ({
+          '@type': 'ListItem',
+          position: idx + 1,
+          url: `https://tandiis.com/news?article=${art.slug}`,
+          name: art.title
+        }))
+      };
+      schemaEl.textContent = JSON.stringify(listSchema);
+    }
+
+    return () => {
+      document.title = prevTitle;
+      if (metaDescEl && prevDesc) {
+        metaDescEl.setAttribute('content', prevDesc);
+      }
+    };
+  }, [activeArticle]);
 
   if (activeArticle) {
     return (
@@ -686,7 +924,7 @@ export const NewsArticlesView: React.FC<{
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-[#dcecec] hover:border-[#0a8387] text-xs font-extrabold text-[#0b5c60] transition-colors cursor-pointer shadow-2xs"
           >
             <ArrowRight className="w-4 h-4" />
-            <span>بازگشت به فهرست مقالات آموزشی</span>
+            <span>بازگشت به فهرست مقالات و آموزش‌ها</span>
           </button>
 
           <div className="flex items-center gap-2 text-xs text-[#5f777b] font-bold">

@@ -21,6 +21,9 @@ export type AdminModuleId =
   | 'tickets'
   | 'sliders'
   | 'violations'
+  | 'seo'
+  | 'ai_content'
+  | 'visitors'
   | 'experts';
 
 export interface AdminUserSession {
@@ -321,6 +324,82 @@ export interface AdminExpertItem {
   created_at_epoch: number;
 }
 
+export interface AdminSeoKeywordItem {
+  id: string;
+  keyword: string;
+  target_url: string;
+  tool_source: string;
+  current_rank: number;
+  previous_rank: number;
+  monthly_volume: number;
+  difficulty: number;
+  intent: string;
+}
+
+export interface AdminSeoIndexedPage {
+  path: string;
+  title: string;
+  priority: string;
+  changefreq: string;
+  status: string;
+}
+
+export interface AdminSeoCrawledRow {
+  url: string;
+  title: string;
+  status_code: number;
+  indexability: string;
+  title_length: number;
+  meta_desc_length: number;
+  h1_status: string;
+  canonical_url: string;
+  schema_types: string;
+  response_time_ms: number;
+  word_count: number;
+}
+
+export interface AdminSeoConfig {
+  site_domain: string;
+  canonical_base_url: string;
+  site_title: string;
+  meta_description: string;
+  focus_keywords: string[];
+  robots_directive: string;
+  gsc_verification_code: string;
+  gsc_html_filename: string;
+  gsc_sitemap_submitted: boolean;
+  gsc_last_ping_epoch: number;
+  ga4_measurement_id: string;
+  ga4_enabled: boolean;
+  ga4_track_orders: boolean;
+  ga4_track_phones: boolean;
+  ga4_track_beauty: boolean;
+  ga4_track_downloads: boolean;
+  rank_tracker_keywords: AdminSeoKeywordItem[];
+  cwv_targets: {
+    lcp_ms: number;
+    inp_ms: number;
+    cls_score: number;
+    fcp_ms: number;
+    ttfb_ms: number;
+    mobile_score: number;
+    desktop_score: number;
+    preload_fonts: boolean;
+    lazy_load_images: boolean;
+    compress_assets: boolean;
+  };
+  content_seo_rules: {
+    min_word_count: number;
+    target_keyword_density_percent: number;
+    require_faq_schema: boolean;
+    require_internal_links: boolean;
+    nlp_terms: string[];
+  };
+  indexed_pages: AdminSeoIndexedPage[];
+  updated_at_epoch: number;
+  updated_by: string;
+}
+
 export interface AdminLiveState {
   ok: boolean;
   online: boolean;
@@ -342,16 +421,17 @@ export interface AdminLiveState {
   homeSliders: AdminSliderItem[];
   categorySliders: Record<string, AdminSliderItem[]>;
   violations: AdminViolation[];
+  seoConfig: AdminSeoConfig | null;
   experts: AdminExpertItem[];
 }
 
 export const ROLE_OPTIONS: Array<{ code: AdminRoleCode; title: string; summary: string }> = [
-  { code: 'SUPER_ADMIN', title: 'مدیر ارشد', summary: 'دسترسی کامل به تمام ۱۴ بخش و اطلاعات مالی' },
-  { code: 'CEO', title: 'مدیر عامل تندیس', summary: 'دسترسی کامل اجرایی و مالی به کل سامانه' },
-  { code: 'IT_DIRECTOR', title: 'مدیر فناوری اطلاعات', summary: 'دسترسی کامل فنی و مدیریتی به تمام بخش‌ها' },
+  { code: 'SUPER_ADMIN', title: 'مدیر ارشد', summary: 'دسترسی کامل به تمام ۱۵ بخش، سئو و اطلاعات مالی' },
+  { code: 'CEO', title: 'مدیر عامل تندیس', summary: 'دسترسی کامل اجرایی، سئو و مالی به کل سامانه' },
+  { code: 'IT_DIRECTOR', title: 'مدیر فناوری اطلاعات', summary: 'دسترسی کامل فنی، سئو و مدیریتی به تمام بخش‌ها' },
   { code: 'HR_EXPERT', title: 'کارشناس منابع انسانی', summary: 'متخصصین، تایید مدارک، زیبایی و تخلفات (بدون دسترسی مالی و شبا)' },
   { code: 'FINANCIAL_EXPERT', title: 'کارشناس مالی', summary: 'گزارش مالی، حق کمیسیون، تسویه حساب و وام تندیس‌پی' },
-  { code: 'SALES_EXPERT', title: 'کارشناس فروش', summary: 'مشتریان، سفارش‌ها، ثبت تلفنی، وام، زیبایی، اسلایدرها و اعلان‌ها' },
+  { code: 'SALES_EXPERT', title: 'کارشناس فروش', summary: 'مشتریان، سفارش‌ها، ثبت تلفنی، وام، زیبایی، اسلایدرها، سئو و اعلان‌ها' },
   { code: 'SUPPORT_EXPERT', title: 'کارشناس پشتیبانی', summary: 'مشتریان، سفارش‌ها، ثبت تلفنی، تیکت‌ها، تخلفات، زیبایی و اعلان‌ها' }
 ];
 
@@ -664,6 +744,39 @@ export async function deleteTicketAdmin(id: string): Promise<void> {
 export async function deleteViolationAdmin(id: string): Promise<void> {
   await adminFetch(`/violations/${encodeURIComponent(id)}`, {
     method: 'DELETE'
+  });
+}
+
+export async function saveSeoConfigAdmin(seoConfig: Partial<AdminSeoConfig>): Promise<{ ok: true; seoConfig: AdminSeoConfig }> {
+  return adminFetch<{ ok: true; seoConfig: AdminSeoConfig }>('/seo/save', {
+    method: 'POST',
+    body: JSON.stringify({ seoConfig })
+  });
+}
+
+export async function pingGoogleSeoAdmin(): Promise<{
+  ok: true;
+  sitemapUrl: string;
+  robotsUrl: string;
+  pingedAtEpoch: number;
+  seoConfig: AdminSeoConfig;
+}> {
+  return adminFetch('/seo/ping-google', {
+    method: 'POST',
+    body: JSON.stringify({})
+  });
+}
+
+export async function runSeoCrawlAuditAdmin(): Promise<{
+  ok: true;
+  auditedAtEpoch: number;
+  domain: string;
+  healthScore: number;
+  crawledRows: AdminSeoCrawledRow[];
+}> {
+  return adminFetch('/seo/crawl-audit', {
+    method: 'POST',
+    body: JSON.stringify({})
   });
 }
 

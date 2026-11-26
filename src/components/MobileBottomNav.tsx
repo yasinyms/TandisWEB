@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Home, Wrench, ReceiptText, Download, User } from 'lucide-react';
+import { Home, Wrench, Sparkles, ReceiptText, BookOpen, User } from 'lucide-react';
 
 interface MobileBottomNavProps {
   activeNav: string;
@@ -15,10 +15,9 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   activeNav,
   onNavClick,
   onOpenAuth,
-  onOpenDrawer,
   isLoggedIn,
 }) => {
-  const isServicesGroup = ['services', 'beauty', 'store', 'tandispay'].includes(activeNav);
+  const isServicesGroup = ['services', 'store', 'tandispay'].includes(activeNav);
 
   const items = [
     {
@@ -35,27 +34,23 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       onClick: () => onNavClick('services'),
       isActive: isServicesGroup,
     },
-    ...(isLoggedIn
-      ? [
-          {
-            id: 'orders',
-            label: 'سفارش‌ها',
-            icon: ReceiptText,
-            onClick: () => onNavClick('orders'),
-            isActive: activeNav === 'orders',
-          },
-        ]
-      : []),
     {
-      id: 'downloads',
-      label: 'دانلود',
-      icon: Download,
-      onClick: () => onNavClick('downloads'),
-      isActive: activeNav === 'downloads',
+      id: 'orders',
+      label: 'درخواست',
+      icon: ReceiptText,
+      onClick: () => onNavClick('orders'),
+      isActive: activeNav === 'orders',
+    },
+    {
+      id: 'news',
+      label: 'آموزش‌ها',
+      icon: BookOpen,
+      onClick: () => onNavClick('news'),
+      isActive: activeNav === 'news',
     },
     {
       id: 'account',
-      label: isLoggedIn ? 'داشبورد' : 'ورود',
+      label: isLoggedIn ? 'داشبورد' : 'حساب من',
       icon: User,
       onClick: isLoggedIn ? () => onNavClick('dashboard') : onOpenAuth,
       isActive: activeNav === 'dashboard',
@@ -65,14 +60,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   return (
     <nav
       dir="rtl"
-      aria-label="منوی پایین موبایل"
-      className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-xl border-t border-[#dfecec] shadow-[0_-4px_20px_rgba(11,92,96,0.08)] px-1.5 pb-[env(safe-area-inset-bottom)] no-print"
+      aria-label="نوار ناوبری آیفون تندیس"
+      className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/88 backdrop-blur-2xl border-t border-slate-200/80 shadow-[0_-8px_28px_-10px_rgba(11,92,96,0.12)] px-2 pb-[max(0.35rem,env(safe-area-inset-bottom))] no-print"
     >
-      <div
-        className={`max-w-md mx-auto h-16 grid items-center ${
-          isLoggedIn ? 'grid-cols-5' : 'grid-cols-4'
-        }`}
-      >
+      <div className="max-w-md mx-auto h-15 grid grid-cols-5 items-center">
         {items.map((item) => {
           const Icon = item.icon;
 
@@ -82,19 +73,22 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
               whileTap={{ scale: 0.9 }}
               type="button"
               onClick={item.onClick}
-              className={`relative flex flex-col items-center justify-center gap-1 py-1.5 transition-colors cursor-pointer ${
-                item.isActive ? 'text-[#0b5c60]' : 'text-[#5f777b] hover:text-[#12292c]'
+              className={`relative min-h-[44px] flex flex-col items-center justify-center gap-0.5 py-1 transition-colors cursor-pointer select-none ${
+                item.isActive ? 'text-[#0a8387]' : 'text-slate-500 active:text-[#12292c]'
               }`}
             >
-              {item.isActive && (
-                <motion.span
-                  layoutId="mobile-active-indicator"
-                  transition={{ type: 'spring', stiffness: 450, damping: 32 }}
-                  className="absolute top-0 w-7 h-[3px] rounded-full bg-[#0a8387]"
-                />
-              )}
-              <Icon className={`w-5 h-5 ${item.isActive ? 'stroke-[2.3]' : 'stroke-[1.8]'}`} />
-              <span className={`text-[10px] whitespace-nowrap ${item.isActive ? 'font-black' : 'font-medium'}`}>
+              <div
+                className={`relative flex items-center justify-center w-11 h-7 rounded-2xl transition-colors ${
+                  item.isActive ? 'bg-[#0a8387]/12 text-[#0a8387]' : ''
+                }`}
+              >
+                <Icon className={`w-5 h-5 ${item.isActive ? 'stroke-[2.4]' : 'stroke-[1.9]'}`} />
+              </div>
+              <span
+                className={`text-[10px] leading-tight whitespace-nowrap ${
+                  item.isActive ? 'font-black text-[#0b5c60]' : 'font-bold text-slate-500'
+                }`}
+              >
                 {item.label}
               </span>
             </motion.button>

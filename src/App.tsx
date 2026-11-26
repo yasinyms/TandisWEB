@@ -4,13 +4,17 @@ import {
   ArrowLeft,
   ArrowRight,
   BellRing,
+  BookOpen,
   CheckCircle2,
+  Clock,
   Download,
   Headphones,
+  MapPin,
   Phone,
   ReceiptText,
   Search,
   ShoppingBag,
+  Sparkles,
   Star,
   Wallet,
   Wrench,
@@ -30,6 +34,7 @@ const AdminPanelShell = lazy(() =>
 import { CustomerSignupView } from './components/CustomerSignupView';
 import {
   AboutTandisView,
+  EDUCATIONAL_SEO_ARTICLES,
   NewsArticlesView,
   NotificationsModal,
   RatingDialog,
@@ -57,6 +62,7 @@ import {
 import {
   DEFAULT_CATEGORIES,
   DEFAULT_ONLINE_STORE_PARTS,
+  DEFAULT_SLIDERS,
   TRENDING_SEARCH_TAGS,
   formatToman,
   statusPersianLabel,
@@ -64,6 +70,7 @@ import {
   toPersianDigits,
   toPurePersianText,
 } from './services/tandisDefaults';
+import { SeoHead } from './components/SeoHead';
 import type {
   AppNotificationItem,
   LiveStatePayload,
@@ -195,6 +202,14 @@ export default function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showEditNameModal, setShowEditNameModal] = useState(false);
   const [showTicketsModal, setShowTicketsModal] = useState(false);
+  const [showIntroLogoMotion, setShowIntroLogoMotion] = useState(true);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setShowIntroLogoMotion(false);
+    }, 1350);
+    return () => window.clearTimeout(timer);
+  }, []);
   const [wizardTarget, setWizardTarget] = useState<{
     group: ServiceCategoryGroup;
     sub: SubServiceItem;
@@ -750,11 +765,11 @@ export default function App() {
     }
   }, [phone, readNotifIds, clearedNotifIds, readAllBeforeEpoch, mergedNotifications]);
 
-  // صرفاً اسلایدرهای واقعی دریافت‌شده از سرور مرکزی (بدون نمایش اسلایدرهای پیش‌فرض ساختگی)
+  // اسلایدرهای تبلیغاتی (دریافت از سرور مرکزی یا استفاده از اسلایدرهای پیش‌فرض باکیفیت)
   const liveSliders: PromoSlide[] = useMemo(() => {
     const raw = liveState?.sliders;
     if (Array.isArray(raw) && raw.length > 0) return raw;
-    return [];
+    return DEFAULT_SLIDERS;
   }, [liveState?.sliders]);
 
   const ota = liveState?.otaConfig;
@@ -1050,10 +1065,74 @@ export default function App() {
 
   return (
     <MotionConfig reducedMotion="user">
+      <SeoHead
+        title={initialRoute.pageTitle}
+        canonicalUrl={`https://tandiis.com${typeof window !== 'undefined' ? window.location.pathname : ''}`}
+      />
       <div
         dir="rtl"
-        className="min-h-screen bg-[#f2f9f9] text-[#12292c] flex flex-col selection:bg-[#0a8387]/20 selection:text-[#0b5c60]"
+        className="min-h-screen bg-[#f4f7f8] lg:bg-[#f2f9f9] text-[#12292c] flex flex-col selection:bg-[#0a8387]/20 selection:text-[#0b5c60]"
       >
+        {/* لوگو موشن رسمی تندیس در ابتدای ورود به سایت (رفع کامل باگ لوگو اولیه و نمایش انیمیشن برند تندیس) */}
+        <AnimatePresence>
+          {showIntroLogoMotion && (
+            <motion.div
+              key="tandis-intro-logo-motion"
+              initial={{ opacity: 1 }}
+              exit={{ opacity: 0, scale: 1.04, filter: 'blur(6px)' }}
+              transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+              onClick={() => setShowIntroLogoMotion(false)}
+              className="fixed inset-0 z-[120] flex flex-col items-center justify-center bg-gradient-to-b from-[#0d6e72] via-[#094245] to-[#052527] text-white select-none cursor-pointer"
+            >
+              <div className="relative flex items-center justify-center">
+                <motion.div
+                  initial={{ scale: 0.7, opacity: 0 }}
+                  animate={{ scale: [0.92, 1.18, 0.96], opacity: [0.45, 0.2, 0.45] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                  className="absolute w-36 h-36 rounded-[38px] border-2 border-teal-300/40"
+                />
+                <motion.div
+                  initial={{ scale: 0.6, opacity: 0 }}
+                  animate={{ scale: [1, 1.28, 1], opacity: [0.25, 0.08, 0.25] }}
+                  transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }}
+                  className="absolute w-44 h-44 rounded-[46px] border border-[#f2a900]/35"
+                />
+                <motion.div
+                  initial={{ scale: 0.55, rotate: -8, opacity: 0 }}
+                  animate={{ scale: 1, rotate: 0, opacity: 1 }}
+                  transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+                  className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-[28px] bg-white p-1.5 shadow-[0_24px_55px_rgba(0,0,0,0.45)] ring-4 ring-white/20 overflow-hidden"
+                >
+                  <img
+                    src="/assets/aistudio/WhatsApp_Image_2026-11-15_at_17.37.57_b48837a8.jpeg"
+                    alt="لوگوی رسمی تندیس | tandiis.com"
+                    className="w-full h-full object-cover rounded-[22px]"
+                  />
+                </motion.div>
+              </div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.16, duration: 0.38 }}
+                className="mt-6 text-center space-y-1.5"
+              >
+                <div className="text-2xl sm:text-3xl font-black tracking-tight">تندیس</div>
+                <div className="text-xs sm:text-sm font-bold text-teal-100/90">
+                  سامانه هوشمند خدمات در محل • <span dir="ltr">tandiis.com</span>
+                </div>
+              </motion.div>
+
+              <motion.div
+                initial={{ width: 0, opacity: 0 }}
+                animate={{ width: 148, opacity: 1 }}
+                transition={{ delay: 0.22, duration: 0.9, ease: 'easeOut' }}
+                className="mt-5 h-1 rounded-full bg-gradient-to-r from-emerald-300 via-[#f2a900] to-teal-200"
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <OfflineIndicator />
 
         {/* هدر اصلی */}
@@ -1077,6 +1156,31 @@ export default function App() {
           onLogout={phone ? handleLogout : undefined}
         />
 
+        {/* بار جستجو و شهر در موبایل (زیر هدر) */}
+        <div className="lg:hidden px-3.5 py-2.5 bg-white border-b border-slate-200/70 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowCityModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#f2f9f9] text-[#0b5c60] text-xs font-black shrink-0 border border-[#d6ebeb]"
+          >
+            <MapPin className="w-3.5 h-3.5 text-[#0a8387]" />
+            <span>{selectedCityName}</span>
+          </button>
+          <div className="relative flex-1 flex items-center">
+            <Search className="w-4 h-4 text-[#7c9296] absolute right-3.5 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSearchSubmit();
+              }}
+              placeholder="جستجوی خدمت، تعمیرات، زیبایی..."
+              className="w-full rounded-xl bg-slate-100 focus:bg-white border border-slate-200 focus:border-[#0b5c60] pr-10 pl-3 py-2 text-xs font-bold text-[#12292c] placeholder:text-slate-400 outline-none"
+            />
+          </div>
+        </div>
+
         {/* اعلان شناور بازخورد */}
         <AnimatePresence>
           {toastMsg && (
@@ -1085,7 +1189,7 @@ export default function App() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -14, scale: 0.96 }}
               transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-              className="fixed top-20 lg:top-22 left-1/2 -translate-x-1/2 z-50 rounded-2xl bg-[#0b5c60] text-white px-5 py-3 text-xs font-extrabold shadow-[0_14px_34px_rgba(11,92,96,0.3)] border border-white/15 flex items-center gap-2 no-print max-w-[92vw]"
+              className="fixed top-16 lg:top-22 left-1/2 -translate-x-1/2 z-50 rounded-2xl bg-[#0b5c60] text-white px-5 py-3 text-xs font-extrabold shadow-[0_14px_34px_rgba(11,92,96,0.3)] border border-white/15 flex items-center gap-2 no-print max-w-[92vw]"
             >
               <CheckCircle2 className="w-4 h-4 text-[#f2a900] shrink-0" />
               <span>{toastMsg}</span>
@@ -1093,9 +1197,9 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        {/* محتوای اصلی صفحه با فاصله نزدیک به هدر */}
-        <main className="flex-1 pt-3 sm:pt-4 pb-24 lg:pb-10">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10">
+        {/* محتوای اصلی صفحه */}
+        <main className="flex-1 pt-2.5 sm:pt-4 pb-24 lg:pb-10">
+          <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-10">
             <AnimatePresence mode="wait">
               {/* صفحه اصلی با Skeleton UI در زمان بارگذاری اولیه */}
               {activeView === 'home' && initialLoading && (
@@ -1105,166 +1209,447 @@ export default function App() {
               )}
 
               {activeView === 'home' && !initialLoading && (
-                <motion.div key="view-home" {...VIEW_TRANSITION} className="space-y-5 sm:space-y-7">
-                  {/* پیام خوش‌آمدگویی بلافاصله زیر هدر */}
-                  {phone && (
-                    <div className="px-1 text-sm sm:text-base font-black text-[#12292c]">
-                      سلام {customerName || 'کاربر گرامی'}
-                    </div>
-                  )}
+                <motion.div key="view-home" {...VIEW_TRANSITION} className="space-y-4 lg:space-y-7">
+                  {/* ==================== نسخه وب‌موبایل اختصاصی آیفون (iOS Minimal Experience - lg:hidden) ==================== */}
+                  <div className="lg:hidden space-y-4">
+                    {/* نوار خوش‌آمدگویی و وضعیت زنده سفارش به سبک iOS Live Activity */}
+                    {phone && (
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-xs font-black text-[#12292c]">
+                          سلام، {customerName || 'کاربر تندیس'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleNavigate('dashboard')}
+                          className="text-[11px] font-extrabold text-[#0a8387] bg-white/90 border border-slate-200/80 px-2.5 py-1 rounded-full shadow-2xs cursor-pointer"
+                        >
+                          داشبورد من
+                        </button>
+                      </div>
+                    )}
 
-                  {phone && activeOrder && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="rounded-[2rem] tandis-calm-gradient text-white p-5 sm:p-6 space-y-4 shadow-[0_14px_34px_rgba(11,92,96,0.18)]"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <div className="text-xs text-white/80 font-bold">پیگیری زنده سفارش فعال شما</div>
-                          <h2 className="text-lg sm:text-xl font-black mt-0.5">{activeOrder.service_title}</h2>
+                    {phone && activeOrder && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        onClick={() => handleNavigate('orders')}
+                        className="rounded-[24px] bg-gradient-to-l from-[#0b5c60] to-[#0a8387] text-white p-3.5 shadow-[0_10px_24px_-8px_rgba(11,92,96,0.35)] flex items-center justify-between gap-3 cursor-pointer"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-[#f2a900] animate-ping" />
+                            <span className="text-[10px] font-bold text-teal-100">سفارش فعال در جریان</span>
+                          </div>
+                          <div className="text-xs font-black truncate mt-0.5">{activeOrder.service_title}</div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="rounded-xl bg-white/15 px-3.5 py-1.5 text-xs font-black">
-                            {statusPersianLabel(activeOrder.status)}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleNavigate('orders')}
-                            className="rounded-xl bg-[#f2a900] text-[#12292c] px-3.5 py-1.5 text-xs font-black cursor-pointer"
-                          >
-                            مشاهده جزئیات
-                          </button>
-                        </div>
-                      </div>
+                        <span className="shrink-0 rounded-full bg-[#f2a900] text-[#12292c] px-3 py-1 text-[11px] font-black">
+                          {statusPersianLabel(activeOrder.status)}
+                        </span>
+                      </motion.div>
+                    )}
 
-                      <div className="grid grid-cols-3 gap-2">
-                        {['۱. تایید متخصص', '۲. در مسیر محل', '۳. در حال انجام'].map((label, idx) => {
-                          const stepActive = statusStepIndex(activeOrder.status) >= idx + 1;
-                          return (
-                            <div
-                              key={label}
-                              className={`rounded-2xl p-2.5 text-center text-xs font-extrabold ${
-                                stepActive ? 'bg-[#f2a900] text-[#12292c]' : 'bg-white/12 text-white/80'
-                              }`}
-                            >
-                              {label}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </motion.div>
-                  )}
+                    {/* اسلایدر بنر با گوشه‌های گرد iOS */}
+                    <HeroCarousel
+                      slides={liveSliders}
+                      onSlideAction={(slide) => {
+                        const slug = String(slide.target_category_slug || '').trim();
+                        if (slug === 'tandispay') {
+                          handleNavigate('tandispay');
+                        } else if (slug === 'store') {
+                          handleNavigate('store');
+                        } else if (slug === 'beauty' || slug === 'cat-beauty-personal') {
+                          handleNavigate('beauty');
+                        } else if (slug) {
+                          handleSelectHomeCategory(slug);
+                        } else {
+                          handleNavigate('services');
+                        }
+                      }}
+                    />
 
-                  {/* اسلایدر عکس‌دار زنده متصل به سامانه مدیریت تندیس */}
-                  <HeroCarousel
-                    slides={liveSliders}
-                    onSlideAction={(slide) => {
-                      const slug = String(slide.target_category_slug || '').trim();
-                      if (slug === 'tandispay') {
-                        handleNavigate('tandispay');
-                      } else if (slug === 'store') {
-                        handleNavigate('store');
-                      } else if (slug === 'beauty' || slug === 'cat-beauty-personal') {
-                        setSelectedGroupSlug('cat-beauty-personal');
-                        setShowBeautyBookingInsideCategory(true);
-                        setActiveView('services');
-                        setServiceSubTab('catalog');
-                        pushBrowserPath('/beauty', ROUTE_TITLES['/beauty']);
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                      } else if (slug) {
-                        setSelectedGroupSlug(slug);
-                        setShowBeautyBookingInsideCategory(false);
-                        setActiveView('services');
-                        setServiceSubTab('catalog');
-                        pushBrowserPath(`/services/${slug}`, ROUTE_TITLES['/services']);
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                      } else {
-                        handleNavigate('services');
-                      }
-                    }}
-                  />
+                    {/* گرید ۴ ستونه آیکون‌های خدمات به سبک iOS */}
+                    <CategoriesGrid
+                      categories={categories}
+                      selectedCategoryId="all"
+                      onSelectCategory={handleSelectHomeCategory}
+                    />
 
-                  {/* دسته‌بندی مینیمال خدمات تندیس (شامل دسته‌های جدید اضافه‌شده توسط مدیریت) */}
-                  <CategoriesGrid
-                    categories={categories}
-                    selectedCategoryId="all"
-                    onSelectCategory={handleSelectHomeCategory}
-                  />
-
-                  {/* نوار دسترسی سریع */}
-                  <section className="space-y-4">
-                    <div className="flex items-center justify-between gap-3 px-1">
-                      <div className="flex items-center gap-2">
-                        <span className="w-1 h-5 bg-[#0a8387] rounded-full" />
-                        <h2 className="text-base sm:text-lg font-black text-[#12292c]">
-                          سرویس‌های تندیس
-                        </h2>
-                      </div>
+                    {/* ویجت‌های ۲×۲ مینیمال آیفون (Bento iOS Widgets) */}
+                    <div className="grid grid-cols-2 gap-2.5">
                       <button
                         type="button"
-                        onClick={() => handleNavigate('services')}
-                        className="inline-flex items-center gap-1 text-xs font-bold text-[#0b5c60] hover:text-[#0a8387] cursor-pointer"
+                        onClick={() => handleNavigate('beauty')}
+                        className="rounded-[22px] bg-gradient-to-br from-[#0b5c60] to-[#0a8387] text-white p-3.5 text-right shadow-xs flex flex-col justify-between min-h-[96px] cursor-pointer active:scale-[0.98] transition-transform"
                       >
-                        <span>همه خدمات</span>
-                        <ArrowLeft className="w-3.5 h-3.5" />
+                        <div className="w-8 h-8 rounded-[12px] bg-white/15 flex items-center justify-center">
+                          <Sparkles className="w-4 h-4 text-[#f2a900]" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-black">زیبایی و سلامت</div>
+                          <div className="text-[10px] text-teal-100/90 mt-0.5">رزرو متخصصان چندمهارتی</div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleNavigate('news')}
+                        className="rounded-[22px] bg-white/95 border border-slate-200/80 text-[#12292c] p-3.5 text-right shadow-2xs flex flex-col justify-between min-h-[96px] cursor-pointer active:scale-[0.98] transition-transform"
+                      >
+                        <div className="w-8 h-8 rounded-[12px] bg-[#effcfb] text-[#0a8387] flex items-center justify-center border border-[#d2eceb]">
+                          <BookOpen className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-black">مقالات و آموزش‌ها</div>
+                          <div className="text-[10px] text-slate-500 mt-0.5">
+                            {toPersianDigits(EDUCATIONAL_SEO_ARTICLES.length)} راهنمای تخصصی
+                          </div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleNavigate('downloads')}
+                        className="rounded-[22px] bg-white/95 border border-slate-200/80 text-[#12292c] p-3.5 text-right shadow-2xs flex flex-col justify-between min-h-[92px] cursor-pointer active:scale-[0.98] transition-transform"
+                      >
+                        <div className="w-8 h-8 rounded-[12px] bg-slate-100 text-[#12292c] flex items-center justify-center">
+                          <Download className="w-4 h-4 text-[#0a8387]" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-black">دانلود اپلیکیشن</div>
+                          <div className="text-[10px] text-slate-500 mt-0.5">نسخه مشتری و همکار</div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleNavigate('provider-signup')}
+                        className="rounded-[22px] bg-white/95 border border-slate-200/80 text-[#12292c] p-3.5 text-right shadow-2xs flex flex-col justify-between min-h-[92px] cursor-pointer active:scale-[0.98] transition-transform"
+                      >
+                        <div className="w-8 h-8 rounded-[12px] bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-200/70">
+                          <Wrench className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-black">ثبت‌نام متخصصان</div>
+                          <div className="text-[10px] text-slate-500 mt-0.5">کسب درآمد در تندیس</div>
+                        </div>
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                      {quickAccessCards.map((card) => {
-                        const Icon = card.icon;
-                        const isDisabled = Boolean(card.disabled);
-                        return (
-                          <motion.button
-                            key={card.id}
-                            type="button"
-                            disabled={isDisabled}
-                            whileHover={isDisabled ? undefined : { y: -3 }}
-                            whileTap={isDisabled ? undefined : { scale: 0.98 }}
-                            onClick={() => {
-                              if (isDisabled) return;
-                              handleNavigate(card.id);
-                            }}
-                            className={`group text-right rounded-2xl bg-white border border-[#e2efef] p-4 sm:p-5 shadow-[0_4px_16px_rgba(11,92,96,0.04)] transition-all flex flex-col justify-between gap-3 ${
-                              isDisabled
-                                ? 'opacity-70 cursor-not-allowed'
-                                : 'hover:border-[#0a8387]/50 hover:shadow-[0_12px_26px_rgba(11,92,96,0.1)] cursor-pointer'
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-2 w-full">
-                              <div
-                                className={`w-11 h-11 rounded-xl bg-gradient-to-br ${card.accent} text-white flex items-center justify-center ${
-                                  isDisabled ? '' : 'group-hover:scale-105'
-                                } transition-transform`}
-                              >
-                                <Icon className="w-5 h-5" />
-                              </div>
-                              {card.comingSoon && (
-                                <span className="px-2.5 py-0.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-black">
-                                  به‌زودی
-                                </span>
-                              )}
-                            </div>
+                    {/* نوار کپسولی سرویس‌های به‌زودی (فروشگاه و تندیس‌پی) به سبک iOS */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div
+                        aria-disabled="true"
+                        className="rounded-2xl bg-white/75 border border-slate-200/70 px-3 py-2.5 flex items-center justify-between opacity-75 select-none"
+                      >
+                        <div className="flex items-center gap-2">
+                          <ShoppingBag className="w-4 h-4 text-slate-400" />
+                          <span className="text-[11px] font-extrabold text-slate-600">فروشگاه</span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[9px] font-black">
+                          به‌زودی
+                        </span>
+                      </div>
 
-                            <div className="space-y-0.5">
-                              <h3 className="text-sm font-black text-[#12292c] group-hover:text-[#0b5c60] transition-colors">
-                                {card.title}
-                              </h3>
-                              <p className="text-xs text-[#5f777b]">{card.subtitle}</p>
-                            </div>
-                          </motion.button>
-                        );
-                      })}
+                      <div
+                        aria-disabled="true"
+                        className="rounded-2xl bg-white/75 border border-slate-200/70 px-3 py-2.5 flex items-center justify-between opacity-75 select-none"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Wallet className="w-4 h-4 text-slate-400" />
+                          <span className="text-[11px] font-extrabold text-slate-600">تندیس‌پی</span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[9px] font-black">
+                          به‌زودی
+                        </span>
+                      </div>
                     </div>
-                  </section>
 
-                  {/* بنر دعوت به عضویت متخصصان + دانلود اپلیکیشن‌ها */}
-                  <CtaBanner
-                    onOpenProviderSignup={() => handleNavigate('provider-signup')}
-                    onExploreAllListings={() => handleNavigate('services')}
-                    onOpenDownloads={() => handleNavigate('downloads')}
-                  />
+                    {/* اسلایدر افقی مقالات و آموزش‌های سئو شده در موبایل آیفون */}
+                    <section className="space-y-2.5 pt-1">
+                      <div className="flex items-center justify-between px-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-4 bg-[#0a8387] rounded-full" />
+                          <h2 className="text-sm font-black text-[#12292c]">مقالات و آموزش‌های تندیس</h2>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleNavigate('news')}
+                          className="text-[11px] font-extrabold text-[#0a8387] flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>مشاهده همه</span>
+                          <ArrowLeft className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
+                        {EDUCATIONAL_SEO_ARTICLES.slice(0, 5).map((art) => (
+                          <button
+                            key={art.id}
+                            type="button"
+                            onClick={() => {
+                              pushBrowserPath(`/news?article=${art.slug}`, `${art.title} | تندیس`);
+                              setActiveView('news');
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            className="w-60 shrink-0 rounded-[22px] bg-white/95 border border-slate-200/80 overflow-hidden text-right shadow-2xs flex flex-col justify-between cursor-pointer active:scale-[0.98] transition-transform"
+                          >
+                            <div className="relative h-28 w-full bg-slate-100 overflow-hidden">
+                              <img
+                                src={art.coverImage}
+                                alt={art.title}
+                                loading="lazy"
+                                referrerPolicy="no-referrer"
+                                className="w-full h-full object-cover"
+                              />
+                              <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-md text-white text-[9px] font-extrabold">
+                                {art.contentType === 'TUTORIAL' ? 'آموزش گام‌به‌گام' : art.category}
+                              </span>
+                            </div>
+                            <div className="p-3 space-y-1.5">
+                              <h3 className="text-xs font-black text-[#12292c] line-clamp-2 leading-5">
+                                {art.title}
+                              </h3>
+                              <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 pt-1">
+                                <span className="inline-flex items-center gap-1">
+                                  <Clock className="w-3 h-3 text-[#0a8387]" />
+                                  {toPersianDigits(art.readingTimeMin)} دقیقه مطالعه
+                                </span>
+                                <span className="text-[#0a8387] font-extrabold">مطالعه ←</span>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  </div>
+
+                  {/* ==================== نسخه دسکتاپ وب‌سایت (hidden lg:block) ==================== */}
+                  <div className="hidden lg:block space-y-7">
+                    {/* پیام خوش‌آمدگویی بلافاصله زیر هدر */}
+                    {phone && (
+                      <div className="px-1 text-base font-black text-[#12292c]">
+                        سلام {customerName || 'کاربر گرامی'}
+                      </div>
+                    )}
+
+                    {phone && activeOrder && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="rounded-[2rem] tandis-calm-gradient text-white p-6 space-y-4 shadow-[0_14px_34px_rgba(11,92,96,0.18)]"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <div className="text-xs text-white/80 font-bold">پیگیری زنده سفارش فعال شما</div>
+                            <h2 className="text-xl font-black mt-0.5">{activeOrder.service_title}</h2>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="rounded-xl bg-white/15 px-3.5 py-1.5 text-xs font-black">
+                              {statusPersianLabel(activeOrder.status)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleNavigate('orders')}
+                              className="rounded-xl bg-[#f2a900] text-[#12292c] px-3.5 py-1.5 text-xs font-black cursor-pointer"
+                            >
+                              مشاهده جزئیات
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                          {['۱. تایید متخصص', '۲. در مسیر محل', '۳. در حال انجام'].map((label, idx) => {
+                            const stepActive = statusStepIndex(activeOrder.status) >= idx + 1;
+                            return (
+                              <div
+                                key={label}
+                                className={`rounded-2xl p-2.5 text-center text-xs font-extrabold ${
+                                  stepActive ? 'bg-[#f2a900] text-[#12292c]' : 'bg-white/12 text-white/80'
+                                }`}
+                              >
+                                {label}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* اسلایدر عکس‌دار زنده متصل به سامانه مدیریت تندیس */}
+                    <HeroCarousel
+                      slides={liveSliders}
+                      onSlideAction={(slide) => {
+                        const slug = String(slide.target_category_slug || '').trim();
+                        if (slug === 'tandispay') {
+                          handleNavigate('tandispay');
+                        } else if (slug === 'store') {
+                          handleNavigate('store');
+                        } else if (slug === 'beauty' || slug === 'cat-beauty-personal') {
+                          setSelectedGroupSlug('cat-beauty-personal');
+                          setShowBeautyBookingInsideCategory(true);
+                          setActiveView('services');
+                          setServiceSubTab('catalog');
+                          pushBrowserPath('/beauty', ROUTE_TITLES['/beauty']);
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        } else if (slug) {
+                          setSelectedGroupSlug(slug);
+                          setShowBeautyBookingInsideCategory(false);
+                          setActiveView('services');
+                          setServiceSubTab('catalog');
+                          pushBrowserPath(`/services/${slug}`, ROUTE_TITLES['/services']);
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        } else {
+                          handleNavigate('services');
+                        }
+                      }}
+                    />
+
+                    {/* دسته‌بندی خدمات تندیس */}
+                    <CategoriesGrid
+                      categories={categories}
+                      selectedCategoryId="all"
+                      onSelectCategory={handleSelectHomeCategory}
+                    />
+
+                    {/* نوار دسترسی سریع */}
+                    <section className="space-y-4">
+                      <div className="flex items-center justify-between gap-3 px-1">
+                        <div className="flex items-center gap-2">
+                          <span className="w-1 h-5 bg-[#0a8387] rounded-full" />
+                          <h2 className="text-lg font-black text-[#12292c]">
+                            سرویس‌های تندیس
+                          </h2>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleNavigate('services')}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-[#0b5c60] hover:text-[#0a8387] cursor-pointer"
+                        >
+                          <span>همه خدمات</span>
+                          <ArrowLeft className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-4">
+                        {quickAccessCards.map((card) => {
+                          const Icon = card.icon;
+                          const isDisabled = Boolean(card.disabled);
+                          return (
+                            <motion.button
+                              key={card.id}
+                              type="button"
+                              disabled={isDisabled}
+                              whileHover={isDisabled ? undefined : { y: -3 }}
+                              whileTap={isDisabled ? undefined : { scale: 0.98 }}
+                              onClick={() => {
+                                if (isDisabled) return;
+                                handleNavigate(card.id);
+                              }}
+                              className={`group text-right rounded-2xl bg-white border border-[#e2efef] p-5 shadow-[0_4px_16px_rgba(11,92,96,0.04)] transition-all flex flex-col justify-between gap-3 ${
+                                isDisabled
+                                  ? 'opacity-70 cursor-not-allowed'
+                                  : 'hover:border-[#0a8387]/50 hover:shadow-[0_12px_26px_rgba(11,92,96,0.1)] cursor-pointer'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2 w-full">
+                                <div
+                                  className={`w-11 h-11 rounded-xl bg-gradient-to-br ${card.accent} text-white flex items-center justify-center ${
+                                    isDisabled ? '' : 'group-hover:scale-105'
+                                  } transition-transform`}
+                                >
+                                  <Icon className="w-5 h-5" />
+                                </div>
+                                {card.comingSoon && (
+                                  <span className="px-2.5 py-0.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-black">
+                                    به‌زودی
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="space-y-0.5">
+                                <h3 className="text-sm font-black text-[#12292c] group-hover:text-[#0b5c60] transition-colors">
+                                  {card.title}
+                                </h3>
+                                <p className="text-xs text-[#5f777b]">{card.subtitle}</p>
+                              </div>
+                            </motion.button>
+                          );
+                        })}
+                      </div>
+                    </section>
+
+                    {/* ویترین مقالات و آموزش‌های تخصصی تندیس (سئو شده) در صفحه اصلی دسکتاپ */}
+                    <section className="space-y-4">
+                      <div className="flex items-center justify-between gap-3 px-1">
+                        <div className="flex items-center gap-2">
+                          <span className="w-1.5 h-5 bg-[#0a8387] rounded-full" />
+                          <h2 className="text-lg font-black text-[#12292c]">
+                            مقالات و آموزش‌های تخصصی تندیس
+                          </h2>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleNavigate('news')}
+                          className="inline-flex items-center gap-1 text-xs font-extrabold text-[#0b5c60] hover:text-[#0a8387] cursor-pointer"
+                        >
+                          <span>مشاهده همه {toPersianDigits(EDUCATIONAL_SEO_ARTICLES.length)} مقاله و آموزش</span>
+                          <ArrowLeft className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-4">
+                        {EDUCATIONAL_SEO_ARTICLES.slice(0, 3).map((art) => (
+                          <button
+                            key={art.id}
+                            type="button"
+                            onClick={() => {
+                              pushBrowserPath(`/news?article=${art.slug}`, `${art.title} | تندیس`);
+                              setActiveView('news');
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            className="group text-right rounded-2xl bg-white border border-[#e2efef] hover:border-[#0a8387]/50 overflow-hidden shadow-[0_4px_16px_rgba(11,92,96,0.04)] hover:shadow-[0_12px_28px_rgba(11,92,96,0.1)] transition-all flex flex-col justify-between cursor-pointer"
+                          >
+                            <div>
+                              <div className="relative h-44 w-full overflow-hidden bg-[#0b5c60]/10">
+                                <img
+                                  src={art.coverImage}
+                                  alt={art.title}
+                                  loading="lazy"
+                                  referrerPolicy="no-referrer"
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                />
+                                <span className="absolute top-3 right-3 px-2.5 py-1 rounded-xl bg-[#0b5c60]/90 backdrop-blur-md text-white text-[11px] font-extrabold">
+                                  {art.contentType === 'TUTORIAL' ? 'آموزش گام‌به‌گام' : art.category}
+                                </span>
+                              </div>
+                              <div className="p-4 space-y-2">
+                                <h3 className="text-sm font-black text-[#12292c] group-hover:text-[#0a8387] leading-6 line-clamp-2 transition-colors">
+                                  {art.title}
+                                </h3>
+                                <p className="text-xs text-[#5f777b] line-clamp-2 leading-5">
+                                  {art.summary}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="px-4 pb-4 pt-2 border-t border-[#f0f7f7] flex items-center justify-between text-xs font-bold text-[#5f777b]">
+                              <span className="inline-flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5 text-[#0a8387]" />
+                                {toPersianDigits(art.readingTimeMin)} دقیقه مطالعه
+                              </span>
+                              <span className="text-[#0a8387] font-black">مطالعه کامل ←</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+
+                    {/* بنر دعوت به عضویت متخصصان + دانلود اپلیکیشن‌ها */}
+                    <CtaBanner
+                      onOpenProviderSignup={() => handleNavigate('provider-signup')}
+                      onExploreAllListings={() => handleNavigate('services')}
+                      onOpenDownloads={() => handleNavigate('downloads')}
+                    />
+                  </div>
                 </motion.div>
               )}
 

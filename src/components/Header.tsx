@@ -59,9 +59,17 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [logoFailed, setLogoFailed] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
+  const mobileSearchInputRef = useRef<HTMLInputElement | null>(null);
 
   const isLoggedIn = Boolean(customerPhone && /^09\d{9}$/.test(customerPhone));
+
+  useEffect(() => {
+    if (mobileSearchOpen) {
+      setTimeout(() => mobileSearchInputRef.current?.focus(), 80);
+    }
+  }, [mobileSearchOpen]);
 
   useEffect(() => {
     if (!isLoggedIn && accountMenuOpen) {
@@ -88,51 +96,87 @@ export const Header: React.FC<HeaderProps> = ({
   }, [accountMenuOpen]);
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-[#e0eeee] shadow-[0_4px_20px_-4px_rgba(11,92,96,0.06)] transition-all duration-300">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 sm:h-18 flex items-center justify-between gap-2.5 sm:gap-4">
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+    <header className="sticky top-0 z-40 w-full bg-white/88 lg:bg-white/95 backdrop-blur-2xl lg:backdrop-blur-md border-b border-slate-200/75 lg:border-[#e0eeee] shadow-[0_2px_14px_-4px_rgba(11,92,96,0.05)] transition-all duration-300">
+      <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 h-14 lg:h-18 flex items-center justify-between gap-2 lg:gap-4">
+        {/* موبایل: همبرگری - لوگو */}
+        <div className="flex items-center gap-2 lg:hidden shrink-0">
+          <button
+            type="button"
+            onClick={onOpenDrawer}
+            className="p-2 rounded-xl bg-slate-100/90 text-[#0b5c60] active:bg-slate-200"
+            aria-label="منوی اصلی"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+
+          <motion.div
+            onClick={() => onNavClick('home')}
+            className="flex items-center gap-1.5 cursor-pointer"
+          >
+            <div className="w-8 h-8 rounded-xl bg-white p-0.5 shadow-xs border border-[#0a8387]/25 overflow-hidden shrink-0">
+              {!logoFailed ? (
+                <img
+                  src={CUSTOMER_LOGO_SRC}
+                  alt="تندیس"
+                  onError={() => setLogoFailed(true)}
+                  className="w-full h-full object-cover rounded-lg"
+                />
+              ) : (
+                <div className="w-full h-full rounded-lg bg-[#0a8387] flex items-center justify-center text-white font-black">
+                  ت
+                </div>
+              )}
+            </div>
+            <span className="text-sm font-black text-[#12292c]">تندیس</span>
+          </motion.div>
+        </div>
+
+        {/* دسکتاپ: دکمه منو + لوگو */}
+        <div className="hidden lg:flex items-center gap-3 shrink-0">
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.94 }}
             onClick={onOpenDrawer}
-            className="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-[#f2f9f9] hover:bg-[#e3f3f3] text-[#0b5c60] transition-colors cursor-pointer border border-[#d6ebeb]"
+            className="p-2.5 rounded-2xl bg-[#f2f9f9] hover:bg-[#e3f3f3] text-[#0b5c60] transition-colors cursor-pointer border border-[#d6ebeb]"
             aria-label="منوی اصلی"
           >
-            <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
+            <Menu className="w-6 h-6" />
           </motion.button>
 
           <motion.div
             onClick={() => onNavClick('home')}
             whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.98 }}
-            className="flex items-center gap-2 sm:gap-2.5 cursor-pointer group"
+            whileTap={{ scale: 0.97 }}
+            className="flex items-center gap-2 cursor-pointer group"
           >
-            <div className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-white p-0.5 flex items-center justify-center shadow-md shadow-[#0b5c60]/15 group-hover:shadow-[#0a8387]/25 transition-all shrink-0 overflow-hidden border-2 border-[#0a8387]/25">
+            <div className="relative w-11 h-11 rounded-2xl bg-white p-0.5 flex items-center justify-center shadow-md shadow-[#0b5c60]/15 border border-[#0a8387]/25 shrink-0 overflow-hidden">
               {!logoFailed ? (
                 <img
                   src={CUSTOMER_LOGO_SRC}
-                  alt="لوگوی تندیس"
+                  alt="لوگوی رسمی تندیس | tandiis.com"
                   referrerPolicy="no-referrer"
                   onError={() => setLogoFailed(true)}
-                  className="w-full h-full object-contain rounded-xl"
+                  className="w-full h-full object-cover rounded-xl"
                 />
               ) : (
                 <div className="w-full h-full rounded-xl bg-gradient-to-br from-[#0a8387] to-[#0b5c60] flex items-center justify-center">
-                  <span className="text-white font-black text-xl sm:text-2xl tracking-tighter">ت</span>
+                  <span className="text-white font-black text-2xl tracking-tighter">ت</span>
                 </div>
               )}
             </div>
-            <span className="text-lg sm:text-2xl font-black tracking-tight text-[#12292c]">
-              تندیس
-            </span>
+            <div className="flex flex-col">
+              <span className="text-2xl font-black tracking-tight text-[#12292c] leading-none">
+                تندیس
+              </span>
+            </div>
           </motion.div>
         </div>
 
-        {/* جستجوی مینیمال در وسط هدر */}
+        {/* جستجوی دسکتاپ در وسط هدر (مخصوص دسکتاپ) */}
         {onSearchChange && (
-          <div className="flex-1 max-w-md mx-1 sm:mx-3">
+          <div className="hidden lg:block flex-1 max-w-md mx-3">
             <div className="relative flex items-center">
-              <Search className="w-4 h-4 text-[#647d81] absolute right-3 pointer-events-none" />
+              <Search className="w-4 h-4 text-[#647d81] absolute right-3.5 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
@@ -142,8 +186,8 @@ export const Header: React.FC<HeaderProps> = ({
                     onSearchSubmit();
                   }
                 }}
-                placeholder="جستجوی خدمت..."
-                className="w-full rounded-xl bg-[#f4fafa] focus:bg-white border border-[#dcecec] focus:border-[#0b5c60] pr-9 pl-8 py-2 text-xs sm:text-sm text-[#12292c] placeholder:text-[#7c9296] outline-none transition-all"
+                placeholder="جستجوی خدمت، تعمیرات، زیبایی..."
+                className="w-full rounded-xl bg-[#f4fafa] focus:bg-white border border-[#dcecec] focus:border-[#0b5c60] pr-10 pl-8 py-2 text-sm text-[#12292c] placeholder:text-[#7c9296] outline-none transition-all"
               />
               {searchQuery && (
                 <button
@@ -159,28 +203,29 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         )}
 
-        <div className="flex items-center gap-2 shrink-0">
-          {isLoggedIn && (
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.96 }}
-              onClick={onOpenCityModal}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl bg-[#f2f9f9] hover:bg-[#e5f4f4] text-[#12292c] border border-[#d6ebeb] transition-all cursor-pointer group"
-            >
-              <MapPin className="w-4 h-4 text-[#0a8387] shrink-0" />
-              <AnimatePresence mode="wait">
-                <motion.span
-                  key={selectedCity}
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 4 }}
-                  className="text-xs sm:text-sm font-bold text-[#0b5c60] max-w-[85px] sm:max-w-[130px] truncate"
-                >
-                  {selectedCity}
-                </motion.span>
-              </AnimatePresence>
-            </motion.button>
-          )}
+        {/* سمت چپ: حساب کاربری */}
+        <div className="flex items-center gap-1.5 lg:gap-2 shrink-0">
+
+          {/* دکمه شهر در دسکتاپ */}
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.96 }}
+            onClick={onOpenCityModal}
+            className="hidden lg:flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#f2f9f9] hover:bg-[#e5f4f4] text-[#12292c] border border-[#d6ebeb] transition-all cursor-pointer group"
+          >
+            <MapPin className="w-4 h-4 text-[#0a8387] shrink-0" />
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={selectedCity}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 4 }}
+                className="text-sm font-bold text-[#0b5c60] max-w-[130px] truncate"
+              >
+                {selectedCity}
+              </motion.span>
+            </AnimatePresence>
+          </motion.button>
 
           {isLoggedIn ? (
             <div ref={accountMenuRef} className="relative">
@@ -351,16 +396,69 @@ export const Header: React.FC<HeaderProps> = ({
             <motion.button
               type="button"
               whileHover={{ scale: 1.02, y: -1 }}
-              whileTap={{ scale: 0.97 }}
+              whileTap={{ scale: 0.96 }}
               onClick={onOpenAuthModal}
-              className="flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-2 rounded-xl bg-gradient-to-l from-[#0a8387] to-[#0b5c60] text-white hover:from-[#097478] hover:to-[#084b4e] transition-all shadow-md shadow-[#0b5c60]/20 text-xs sm:text-sm font-bold cursor-pointer"
+              className="flex items-center gap-1.5 px-3 lg:px-4 py-1.5 lg:py-2 rounded-full lg:rounded-xl bg-gradient-to-l from-[#0a8387] to-[#0b5c60] text-white hover:from-[#097478] hover:to-[#084b4e] transition-all shadow-xs lg:shadow-md shadow-[#0b5c60]/20 text-xs lg:text-sm font-extrabold cursor-pointer"
             >
-              <User className="w-4 h-4 shrink-0" />
+              <User className="w-3.5 h-3.5 lg:w-4 lg:h-4 shrink-0" />
               <span>ورود</span>
             </motion.button>
           )}
+
         </div>
       </div>
+
+      {/* کادر جستجوی بازشونده iOS Spotlight مخصوص موبایل آیفون */}
+      <AnimatePresence>
+        {onSearchChange && (mobileSearchOpen || Boolean(searchQuery)) && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            className="lg:hidden overflow-hidden border-t border-slate-200/70 bg-white/95 backdrop-blur-2xl"
+          >
+            <div className="px-3.5 py-2.5 flex items-center gap-2">
+              <div className="relative flex-1 flex items-center">
+                <Search className="w-4 h-4 text-[#0a8387] absolute right-3.5 pointer-events-none" />
+                <input
+                  ref={mobileSearchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && onSearchSubmit) {
+                      onSearchSubmit();
+                    }
+                  }}
+                  placeholder="جستجو در خدمات تندیس..."
+                  className="w-full rounded-2xl bg-slate-100/90 focus:bg-white border border-slate-200/80 focus:border-[#0a8387] pr-10 pl-8 py-2 text-xs font-bold text-[#12292c] placeholder:text-slate-400 outline-none transition-all"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => onSearchChange('')}
+                    className="absolute left-2.5 p-1 rounded-full text-slate-400 hover:text-slate-700 cursor-pointer"
+                    aria-label="پاک کردن"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onSearchChange('');
+                  setMobileSearchOpen(false);
+                }}
+                className="text-xs font-extrabold text-[#0b5c60] px-2 py-1.5 cursor-pointer shrink-0"
+              >
+                بستن
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </header>
   );
 };

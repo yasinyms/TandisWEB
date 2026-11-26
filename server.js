@@ -6,7 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import { Readable } from 'stream';
 import { fileURLToPath } from 'url';
-import { createAdminRouter } from './adminRoutes.js';
+import { createAdminRouter, getActiveSeoConfig, getDefaultSeoConfig } from './adminRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1406,7 +1406,19 @@ app.get('/api/tandis/live-state', async (req, res) => {
       tickets: mergedCustomerTickets.filter((t) => !isAdminDeleted(`ticket:${t.id}`, t.created_at_epoch)),
       notifications: phone ? resolvedNotifications.filter((n) => !isAdminDeleted(`notification:${n.id}`, n.createdAtEpoch)) : [],
       notificationState: phone ? notificationState : { readIds: [], clearedIds: [], readAllBeforeEpoch: 0 },
-      officialSpecialists
+      officialSpecialists,
+      seoConfig: (() => {
+        let cfg = getActiveSeoConfig() || getDefaultSeoConfig();
+        for (const r of sortedReviews) {
+          if (String(r.id || '') === 'config_seo_settings' || r.request_id === 'SYSTEM_SEO_CONFIG') {
+            try {
+              const parsed = JSON.parse(r.comment || '{}');
+              cfg = { ...cfg, ...parsed };
+            } catch {}
+          }
+        }
+        return cfg;
+      })()
     });
   } catch (err) {
     res.status(500).json({ online: false, error: String(err?.message || err) });
@@ -2878,10 +2890,10 @@ const PAGE_SEO_ROUTES = [
     description: 'پنل اختصاصی مشتریان تندیس؛ مشاهده تعداد سفارشات، وضعیت اقساط تندیس‌پی، چاپ فاکتور رسمی و ارسال تیکت پشتیبانی.',
   },
   {
-    paths: ['/news', '/articles', '/blog'],
+    paths: ['/news', '/articles', '/blog', '/tutorials'],
     canonical: '/news',
-    title: 'مجله آموزشی، اخبار و مقالات تخصصی تندیس | تندیس',
-    description: 'مقالات آموزشی نگهداری لوازم خانگی، سرویس دوره‌ای خودرو، راهنمای خدمات زیبایی و تازه‌ترین اخبار سامانه خدمات تندیس.',
+    title: 'مجله آموزشی، مقالات و آموزش‌های تخصصی تندیس | تندیس (tandiis.com)',
+    description: 'مقالات آموزشی سئو شده و آموزش‌های گام‌به‌گام نگهداری لوازم خانگی، سرویس کولر گازی، عیب‌یابی پکیج، چکاپ خودرو و راهنمای خدمات زیبایی در تندیس.',
   },
   {
     paths: ['/about', '/contact', '/terms', '/privacy'],
@@ -2889,6 +2901,58 @@ const PAGE_SEO_ROUTES = [
     title: 'درباره تندیس، قوانین عودت وجه و نماد اعتماد | تندیس',
     description: 'معرفی سامانه جامع تندیس، نماد اعتماد الکترونیکی (اینماد)، قوانین خرید، رویه لغو و عودت وجه، زمان ارسال و پشتیبانی ۲۴ ساعته.',
   },
+];
+
+const SEO_ARTICLES_INDEX = [
+  {
+    slug: 'air-conditioner-maintenance-guide',
+    path: '/news?article=air-conditioner-maintenance-guide',
+    title: 'راهنمای جامع سرویس دوره‌ای کولر گازی و اسپلیت؛ کاهش ۴۰ درصدی مصرف برق | تندیس',
+    description: 'آموزش گام‌به‌گام نگهداری، شست‌وشوی فیلترها، تشخیص کمبود گاز مبرد و زمان طلایی سرویس کولر گازی در تندیس.',
+    priority: '0.90'
+  },
+  {
+    slug: 'car-periodic-checkup-before-trip',
+    path: '/news?article=car-periodic-checkup-before-trip',
+    title: '۷ چکاپ حیاتی خودرو پیش از سفر؛ پیشگیری از خرابی ناگهانی در جاده | تندیس',
+    description: 'بررسی تخصصی سلامت باتری، سیستم خنک‌کننده، لنت و روغن‌ترمز، تسمه تایم و لاستیک‌ها پیش از حرکت در سفر.',
+    priority: '0.90'
+  },
+  {
+    slug: 'washing-machine-and-refrigerator-care',
+    path: '/news?article=washing-machine-and-refrigerator-care',
+    title: 'علت لرزش ماشین لباسشویی و صدای غیرعادی یخچال؛ راهنمای عیب‌یابی | تندیس',
+    description: 'راهنمای کاربردی افزایش عمر لوازم خانگی برقی، جرم‌گیری اصولی لباسشویی و تنظیم دمای استاندارد یخچال فریزر.',
+    priority: '0.90'
+  },
+  {
+    slug: 'keratin-and-hair-revival-care-guide',
+    path: '/news?article=keratin-and-hair-revival-care-guide',
+    title: 'راهنمای تخصصی کراتین، احیا و پروتئین‌تراپی مو؛ مراقبت‌های طلایی | تندیس',
+    description: 'تفاوت کراتین صافی با بوتاکس و پروتئین‌تراپی مو و روش‌های افزایش ماندگاری ابریشم‌سازی مو تا ۱۲ ماه در کلینیک زیبایی تندیس.',
+    priority: '0.90'
+  },
+  {
+    slug: 'sofa-and-carpet-deep-cleaning-guide',
+    path: '/news?article=sofa-and-carpet-deep-cleaning-guide',
+    title: 'اصول مبل‌شویی نانو و نظافت عمیق منزل؛ پاک کردن لکه‌های سرسخت | تندیس',
+    description: 'بررسی مزایای شست‌وشوی خشکشویی مبل در منزل با دستگاه راگ‌واشر و مواد نانو ضدحساسیت بدون ریزش آب در تندیس.',
+    priority: '0.88'
+  },
+  {
+    slug: 'wall-boiler-troubleshooting-tutorial',
+    path: '/news?article=wall-boiler-troubleshooting-tutorial',
+    title: 'آموزش گام‌به‌گام عیب‌یابی، هواگیری و سرویس پکیج دیواری | تندیس',
+    description: 'آموزش عملی تنظیم فشار استاندارد ۱.۵ بار، هواگیری رادیاتورها، رفع افت فشار و رسوب‌زدایی مبدل پکیج دیواری.',
+    priority: '0.92'
+  },
+  {
+    slug: 'skincare-facial-and-nail-care-tutorial',
+    path: '/news?article=skincare-facial-and-nail-care-tutorial',
+    title: 'آموزش تخصصی پاکسازی پوست، فیشیال و مراقبت از ناخن | تندیس',
+    description: 'آموزش مراحل فیشیال تخصصی، آبرسانی عمقی پوست و نکات طلایی افزایش دوام کاشت و لمینت ناخن در کلینیک زیبایی تندیس.',
+    priority: '0.92'
+  }
 ];
 
 function escapeHtmlAttr(str) {
@@ -2900,14 +2964,37 @@ function escapeHtmlAttr(str) {
 }
 
 function renderHtmlWithSeo(baseHtml, routeMeta) {
-  if (!routeMeta) return baseHtml;
-  const safeTitle = escapeHtmlAttr(routeMeta.title);
-  const safeDesc = escapeHtmlAttr(routeMeta.description);
+  const seoCfg = getActiveSeoConfig() || getDefaultSeoConfig();
+  const baseUrl = String(seoCfg.canonical_base_url || 'https://tandiis.com').replace(/\/+$/, '');
+  const titleText = routeMeta?.title || seoCfg.site_title || 'تندیس | خدمات در محل، تعمیرات، زیبایی و سلامت (tandiis.com)';
+  const descText = routeMeta?.description || seoCfg.meta_description || '';
+  const canonicalUrl = `${baseUrl}${routeMeta?.canonical || '/'}`;
+  const safeTitle = escapeHtmlAttr(titleText);
+  const safeDesc = escapeHtmlAttr(descText);
+  const safeVerify = escapeHtmlAttr(seoCfg.gsc_verification_code || 'tandis-google-site-verification-tandiis-com');
+  const safeRobots = escapeHtmlAttr(seoCfg.robots_directive || 'index, follow');
+
   return baseHtml
     .replace(/<title>[\s\S]*?<\/title>/i, `<title>${safeTitle}</title>`)
     .replace(
       /<meta\s+name="description"\s+content="[\s\S]*?"\s*\/>/i,
       `<meta name="description" content="${safeDesc}" />`
+    )
+    .replace(
+      /<meta\s+name="robots"\s+content="[\s\S]*?"\s*\/>/i,
+      `<meta name="robots" content="${safeRobots}" />`
+    )
+    .replace(
+      /<meta\s+name="google-site-verification"\s+content="[\s\S]*?"\s*\/>/i,
+      `<meta name="google-site-verification" content="${safeVerify}" />`
+    )
+    .replace(
+      /<link\s+rel="canonical"\s+href="[\s\S]*?"\s*\/>/i,
+      `<link rel="canonical" href="${escapeHtmlAttr(canonicalUrl)}" />`
+    )
+    .replace(
+      /<meta\s+property="og:url"\s+content="[\s\S]*?"\s*\/>/i,
+      `<meta property="og:url" content="${escapeHtmlAttr(canonicalUrl)}" />`
     )
     .replace(
       /<meta\s+property="og:title"\s+content="[\s\S]*?"\s*\/>/i,
@@ -2927,7 +3014,7 @@ function renderHtmlWithSeo(baseHtml, routeMeta) {
     );
 }
 
-// پنل مدیریت یکپارچه سایت و کارشناسان تندیس (۱۴ ماژول زنده با احراز هویت و کنترل دسترسی نقش‌ها)
+// پنل مدیریت یکپارچه سایت و کارشناسان تندیس (۱۵ ماژول زنده با احراز هویت و کنترل دسترسی نقش‌ها)
 app.use(
   '/api/admin',
   (req, res, next) => {
@@ -2953,25 +3040,71 @@ app.get('/api/routes', (_req, res) => {
       aliases: r.paths,
       title: r.title,
     })),
+    articles: SEO_ARTICLES_INDEX
   });
 });
 
-// فایل robots.txt و sitemap.xml داینامیک برای تمام مسیرهای صفحات
-app.get('/robots.txt', (req, res) => {
-  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-  const host = req.headers.host || 'tandiis.com';
+// تایید خودکار فایل مالکیت Google Search Console برای دامنه tandiis.com
+app.get(/^\/(google[a-z0-9_-]+\.html)$/i, (req, res) => {
+  const filename = req.params[0] || 'google8499335tandiis.html';
   res
-    .type('text/plain; charset=utf-8')
-    .send(`User-agent: *\nAllow: /\nSitemap: ${proto}://${host}/sitemap.xml\n`);
+    .type('text/html; charset=utf-8')
+    .send(`google-site-verification: ${filename}`);
 });
 
-app.get('/sitemap.xml', (req, res) => {
-  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-  const host = req.headers.host || 'tandiis.com';
-  const urls = PAGE_SEO_ROUTES.map((r) => `  <url><loc>${proto}://${host}${r.canonical}</loc></url>`).join('\n');
+// فایل robots.txt و sitemap.xml داینامیک برای دامنه رسمی tandiis.com و تمام مسیرهای صفحات و مقالات و آموزش‌ها
+app.get('/robots.txt', (_req, res) => {
+  const seoCfg = getActiveSeoConfig() || getDefaultSeoConfig();
+  const baseUrl = String(seoCfg.canonical_base_url || 'https://tandiis.com').replace(/\/+$/, '');
+  res
+    .type('text/plain; charset=utf-8')
+    .send(
+      [
+        'User-agent: *',
+        'Allow: /',
+        'Disallow: /management',
+        'Disallow: /api/',
+        '',
+        `Host: ${seoCfg.site_domain || 'tandiis.com'}`,
+        `Sitemap: ${baseUrl}/sitemap.xml`,
+        ''
+      ].join('\n')
+    );
+});
+
+app.get('/sitemap.xml', (_req, res) => {
+  const seoCfg = getActiveSeoConfig() || getDefaultSeoConfig();
+  const baseUrl = String(seoCfg.canonical_base_url || 'https://tandiis.com').replace(/\/+$/, '');
+  const todayIso = new Date().toISOString().split('T')[0];
+  const seenLocs = new Set();
+  const entries = [];
+
+  const pushEntry = (locPath, priority = '0.8', changefreq = 'daily') => {
+    const cleanPath = String(locPath || '/').startsWith('/') ? String(locPath) : `/${locPath}`;
+    const fullUrl = `${baseUrl}${cleanPath}`;
+    if (seenLocs.has(fullUrl)) return;
+    seenLocs.add(fullUrl);
+    const xmlLoc = fullUrl.replace(/&/g, '&amp;');
+    entries.push(
+      `  <url>\n    <loc>${xmlLoc}</loc>\n    <lastmod>${todayIso}</lastmod>\n    <changefreq>${changefreq}</changefreq>\n    <priority>${priority}</priority>\n  </url>`
+    );
+  };
+
+  for (const p of Array.isArray(seoCfg.indexed_pages) ? seoCfg.indexed_pages : []) {
+    pushEntry(p.path || '/', p.priority || '0.9', p.changefreq || 'daily');
+  }
+  for (const r of PAGE_SEO_ROUTES) {
+    pushEntry(r.canonical, r.canonical === '/' ? '1.0' : '0.85', 'weekly');
+  }
+  for (const art of SEO_ARTICLES_INDEX) {
+    pushEntry(art.path, art.priority || '0.90', 'weekly');
+  }
+
   res
     .type('application/xml; charset=utf-8')
-    .send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
+    .send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries.join('\n')}\n</urlset>\n`
+    );
 });
 
 // در محیط پیش‌نمایش (که WebSocket غیرفعال است)، کلاینت HMR وایت را با ماژول بی‌اثر جایگزین کن تا خطای WebSocket closed without opened رخ ندهد
