@@ -194,15 +194,25 @@ export interface TandisPayLoan {
   customer_phone: string;
   customer_name: string;
   requested_amount_toman: number;
+  amount_toman?: number;
   installment_months: number;
+  installments_count?: number;
+  months?: number;
   interest_rate_percent: number;
   monthly_installment_toman: number;
   total_repayment_toman: number;
+  paid_installments_count?: number;
+  paid_installments?: number[];
   national_code: string;
+  tracking_code?: string;
+  wallet_credited?: boolean;
   documents_count?: number;
   documents_base64?: string[];
   status: string;
   admin_note?: string;
+  reject_reason?: string;
+  approved_at_epoch?: number;
+  updated_at_epoch?: number;
   created_at_epoch: number;
 }
 
@@ -326,6 +336,11 @@ export interface LiveStatePayload {
   partInquiries: PartInquiryItem[];
   tickets?: SupportTicket[];
   notifications?: AppNotificationItem[];
+  notificationState?: {
+    readIds: string[];
+    clearedIds: string[];
+    readAllBeforeEpoch: number;
+  };
   officialSpecialists?: OfficialSpecialistSummary[];
 }
 

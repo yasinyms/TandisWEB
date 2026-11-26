@@ -20,7 +20,7 @@ import {
 } from '../services/tandisDefaults';
 import type { BeautyBooking, BeautySpecialist } from '../types/tandis';
 
-const BEAUTY_SKILLS = ['همه مهارت‌ها', 'کراتین و احیا', 'کاشت ناخن', 'اصلاح و رنگ مو', 'پاکسازی پوست'];
+const DEFAULT_SKILL_FILTERS = ['همه مهارت‌ها', 'کراتین و احیا', 'آرایش و رنگ مو', 'کاشت ناخن', 'پاکسازی پوست'];
 
 export const BeautySalonView: React.FC<{
   dark: boolean;
@@ -56,7 +56,7 @@ export const BeautySalonView: React.FC<{
   const calendarDays = useMemo(() => getRollingSevenJalaliDays(), []);
   const [selectedDayIdx, setSelectedDayIdx] = useState(0);
   const [selectedSkill, setSelectedSkill] = useState('همه مهارت‌ها');
-  const [onlyAvailable, setOnlyAvailable] = useState(true);
+  const [onlyAvailable, setOnlyAvailable] = useState(false);
   const [activeProfile, setActiveProfile] = useState<BeautySpecialist | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<string>('');
   const [selectedTariffTitle, setSelectedTariffTitle] = useState<string>('');
@@ -66,41 +66,89 @@ export const BeautySalonView: React.FC<{
   const mutedCls = dark ? 'text-[#94A3B8]' : 'text-[#527371]';
 
   const mergedSpecialists: BeautySpecialist[] = useMemo(() => {
-    if (Array.isArray(liveSpecialists) && liveSpecialists.length > 0) {
-      return liveSpecialists.map((s) => ({
+    const sourceList =
+      Array.isArray(liveSpecialists) && liveSpecialists.length > 0
+        ? liveSpecialists
+        : DEFAULT_BEAUTY_SPECIALISTS;
+
+    return sourceList.map((s) => {
+      const tariffSkills = Array.isArray(s.tariffs)
+        ? s.tariffs.map((t) => toPurePersianText(t.title)).filter(Boolean)
+        : [];
+      const explicitSkills = Array.isArray(s.skills)
+        ? s.skills.map((sk) => toPurePersianText(sk)).filter(Boolean)
+        : [];
+      const combinedSkills = Array.from(new Set([...explicitSkills, ...tariffSkills]));
+      const finalSkills =
+        combinedSkills.length > 0
+          ? combinedSkills
+          : ['کراتین و احیای مو', 'آرایش و رنگ مو'];
+
+      const finalTariffs =
+        s.tariffs && s.tariffs.length > 0
+          ? s.tariffs.map((t) => ({
+              ...t,
+              title: toPurePersianText(t.title) || 'خدمت تخصصی زیبایی',
+              price_toman: Number(t.price_toman || 0) > 0 ? Number(t.price_toman) : 650000,
+              duration_min: Number(t.duration_min || 60)
+            }))
+          : finalSkills.map((sk) => ({
+              title: sk,
+              price_toman: 750000,
+              duration_min: 60
+            }));
+
+      return {
         ...s,
         specialist_name: toPurePersianText(s.specialist_name) || 'متخصص زیبایی تندیس',
         business_name: toPurePersianText(s.business_name) || 'سالن زیبایی تاییدشده تندیس',
-        role_title: toPurePersianText(s.role_title) || 'متخصص زیبایی و سلامت بانوان',
-        bio: s.bio || 'ارائه‌دهنده خدمات تخصصی زیبایی و مراقبتی با مواد درجه یک و نوبت‌دهی آنلاین تندیس.',
+        role_title:
+          toPurePersianText(s.role_title) ||
+          finalSkills.slice(0, 2).join(' و ') ||
+          'متخصص زیبایی و سلامت',
+        bio:
+          s.bio ||
+          'ارائه‌دهنده خدمات تخصصی زیبایی و سلامت با مهارت‌های تاییدشده و نوبت‌دهی آنلاین در سامانه تندیس.',
         salon_map_status: s.salon_map_status || 'موقعیت سالن روی نقشه تایید و ثبت شده است',
         rating: s.rating || 4.8,
         review_count: s.review_count || 32,
-        skills: s.skills && s.skills.length > 0 ? s.skills : ['کراتین و احیا', 'کاشت ناخن', 'پاکسازی پوست'],
-        tariffs:
-          s.tariffs && s.tariffs.length > 0
-            ? s.tariffs.map((t) => ({
-                ...t,
-                price_toman: Number(t.price_toman || 0) > 0 ? Number(t.price_toman) : 650000,
-                duration_min: Number(t.duration_min || 60)
-              }))
-            : [{ title: 'نوبت تخصصی زیبایی', price_toman: 650000, duration_min: 60 }],
+        skills: finalSkills,
+        tariffs: finalTariffs,
         portfolio_notes: s.portfolio_notes || ['استفاده از مواد استاندارد و ابزار استریل'],
-        reviews: s.reviews || [{ customer_name: 'مشتری تندیس', stars: 5, comment: 'برخورد عالی و انجام کار دقیق سر ساعت نوبت.', date_label: 'اخیراً' }],
+        reviews:
+          s.reviews || [
+            {
+              customer_name: 'مشتری تندیس',
+              stars: 5,
+              comment: 'برخورد عالی و انجام کار دقیق سر ساعت نوبت.',
+              date_label: 'اخیراً'
+            }
+          ],
         days: s.days && s.days.length > 0 ? s.days : calendarDays
-      }));
-    }
-    return DEFAULT_BEAUTY_SPECIALISTS;
+      };
+    });
   }, [liveSpecialists, calendarDays]);
+
+  const dynamicSkillFilters = useMemo(() => {
+    const set = new Set<string>(DEFAULT_SKILL_FILTERS);
+    for (const spec of mergedSpecialists) {
+      for (const sk of spec.skills || []) {
+        if (sk && sk.length <= 32) set.add(sk);
+      }
+    }
+    return Array.from(set);
+  }, [mergedSpecialists]);
 
   const activeDay = calendarDays[selectedDayIdx] || calendarDays[0];
 
   const filteredSpecialists = useMemo(() => {
     return mergedSpecialists.filter((spec) => {
+      const keyword = selectedSkill.replace('و ', '').split(' ')[0];
       const skillMatch =
         selectedSkill === 'همه مهارت‌ها' ||
-        (spec.skills || []).some((sk) => sk.includes(selectedSkill.replace('و ', '').split(' ')[0])) ||
-        (spec.role_title || '').includes(selectedSkill.split(' ')[0]);
+        (spec.skills || []).some((sk) => sk === selectedSkill || sk.includes(keyword)) ||
+        (spec.tariffs || []).some((t) => t.title === selectedSkill || t.title.includes(keyword)) ||
+        (spec.role_title || '').includes(keyword);
       if (!skillMatch) return false;
       if (!onlyAvailable) return true;
       const dayEntry = (spec.days || [])[selectedDayIdx] || (spec.days || [])[0];
@@ -111,7 +159,10 @@ export const BeautySalonView: React.FC<{
 
   const selectedTariff = useMemo(() => {
     const list = activeProfile?.tariffs || [];
-    return list.find((t) => t.title === selectedTariffTitle) || list[0] || { title: 'نوبت زیبایی تندیس', price_toman: 650000, duration_min: 60 };
+    return (
+      list.find((t) => t.title === selectedTariffTitle) ||
+      list[0] || { title: 'نوبت زیبایی تندیس', price_toman: 650000, duration_min: 60 }
+    );
   }, [activeProfile, selectedTariffTitle]);
 
   const effectiveDepositToman = useMemo(() => {
@@ -192,11 +243,11 @@ export const BeautySalonView: React.FC<{
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-xs font-extrabold text-[#065A52] dark:text-[#14B8A6]">
             <Sparkles className="w-4 h-4" />
-            زیبایی و سلامت بانوان
+            متخصصان زیبایی و سلامت تندیس
           </div>
-          <h2 className="text-xl font-black">تقویم نوبت‌دهی و متخصصان</h2>
+          <h2 className="text-lg sm:text-xl font-black">لیست افراد، مهارت‌های تخصصی و رزرو آنلاین نوبت</h2>
           <p className={`text-xs ${mutedCls}`}>
-            رزرو آنلاین با تعرفه شفاف سالن‌ها و امکان لغو نوبت و بازگشت فوری بیعانه در هر زمان
+            مشاهده مستقیم متخصصان زیبایی، مهارت‌های ثبت‌شده هر فرد در سرور (کراتین، آرایش مو، ناخن، پوست و...) و رزرو آنلاین
           </p>
         </div>
 
@@ -207,7 +258,7 @@ export const BeautySalonView: React.FC<{
               subTab === 'explore' ? 'bg-[#065A52] text-white' : mutedCls
             }`}
           >
-            تقویم و متخصصان
+            لیست متخصصان ({toPersianDigits(filteredSpecialists.length)})
           </button>
           <button
             onClick={() => setSubTab('appointments')}
@@ -222,12 +273,29 @@ export const BeautySalonView: React.FC<{
 
       {subTab === 'explore' ? (
         <>
-          {/* تقویم ۷ روز آینده */}
+          {/* فیلتر مهارت‌ها و تقویم ۷ روز آینده */}
           <div className={`rounded-3xl border p-4 space-y-4 ${cardCls}`}>
-            <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+              {dynamicSkillFilters.map((sk) => (
+                <button
+                  key={sk}
+                  type="button"
+                  onClick={() => setSelectedSkill(sk)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap border cursor-pointer transition-colors ${
+                    selectedSkill === sk
+                      ? 'bg-[#065A52] text-white border-[#065A52]'
+                      : 'border-[#E2EFEF] dark:border-[#26384E] hover:border-[#065A52]/50'
+                  }`}
+                >
+                  {sk}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-[#eef5f5]">
               <div className="flex items-center gap-2 text-xs font-black">
                 <Calendar className="w-4 h-4 text-[#065A52] dark:text-[#14B8A6]" />
-                انتخاب روز از تقویم زنده ۷ روز آینده:
+                انتخاب روز نوبت از تقویم ۷ روز آینده:
               </div>
               <label className="flex items-center gap-2 text-xs font-bold cursor-pointer">
                 <input
@@ -236,7 +304,7 @@ export const BeautySalonView: React.FC<{
                   onChange={(e) => setOnlyAvailable(e.target.checked)}
                   className="accent-[#065A52]"
                 />
-                نمایش تنها متخصصان دارای نوبت آزاد
+                نمایش تنها افراد دارای نوبت آزاد در این روز
               </label>
             </div>
 
@@ -246,6 +314,7 @@ export const BeautySalonView: React.FC<{
                 return (
                   <button
                     key={day.date_key}
+                    type="button"
                     onClick={() => setSelectedDayIdx(idx)}
                     className={`rounded-2xl p-2.5 text-center border transition cursor-pointer ${
                       active
@@ -259,31 +328,22 @@ export const BeautySalonView: React.FC<{
                 );
               })}
             </div>
-
-            <div className="flex items-center gap-2 overflow-x-auto pt-1">
-              {BEAUTY_SKILLS.map((sk) => (
-                <button
-                  key={sk}
-                  onClick={() => setSelectedSkill(sk)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap border cursor-pointer ${
-                    selectedSkill === sk
-                      ? 'bg-[#0D9488] text-white border-[#0D9488]'
-                      : 'border-[#E2EFEF] dark:border-[#26384E]'
-                  }`}
-                >
-                  {sk}
-                </button>
-              ))}
-            </div>
           </div>
 
-          {/* لیست متخصصان */}
+          {/* لیست مستقیم افراد و متخصصان زیبایی به‌همراه مهارت‌های چندگانه هر فرد */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredSpecialists.map((spec) => {
               const dayObj = (spec.days || [])[selectedDayIdx] || (spec.days || [])[0];
               const slots = dayObj?.is_open ? dayObj.slots || dayObj.time_slots || [] : [];
+              const specSkills = Array.isArray(spec.skills) && spec.skills.length > 0
+                ? spec.skills
+                : (spec.tariffs || []).map((t) => t.title);
+
               return (
-                <div key={spec.specialist_phone} className={`rounded-3xl border p-5 space-y-4 ${cardCls}`}>
+                <div
+                  key={spec.specialist_phone}
+                  className={`rounded-3xl border p-5 space-y-4 hover:border-[#065A52]/50 transition-all shadow-2xs ${cardCls}`}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
                       {spec.avatar_url ? (
@@ -300,21 +360,52 @@ export const BeautySalonView: React.FC<{
                       )}
                       <div>
                         <h3 className="font-black text-base">{spec.specialist_name}</h3>
-                        <div className="text-xs font-bold text-[#0D9488] dark:text-[#14B8A6]">{spec.business_name}</div>
-                        <div className={`text-[11px] mt-0.5 ${mutedCls}`}>{spec.role_title}</div>
+                        <div className="text-xs font-bold text-[#0D9488] dark:text-[#14B8A6]">
+                          {spec.business_name}
+                        </div>
+                        <div className={`text-[11px] mt-0.5 ${mutedCls}`}>
+                          {spec.salon_address || spec.service_city || 'شهر منتخب شما'}
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 text-xs font-black text-[#D97706] dark:text-[#FBBF24]">
-                      <Star className="w-4 h-4 fill-current" />
+                    <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-50 text-xs font-black text-[#D97706]">
+                      <Star className="w-3.5 h-3.5 fill-current" />
                       <span>{toPersianDigits(spec.rating || 4.8)}</span>
                     </div>
                   </div>
 
-                  <div className={`text-xs flex items-center gap-1.5 ${mutedCls}`}>
-                    <MapPin className="w-3.5 h-3.5 shrink-0 text-[#065A52] dark:text-[#14B8A6]" />
-                    <span>{spec.salon_address || spec.service_city || 'شهر منتخب شما'}</span>
-                    <span aria-hidden="true">·</span>
-                    <span className="text-[#10B981] font-bold">نقشه تاییدشده</span>
+                  {/* نمایش تگ مهارت‌های چندگانه هر متخصص (مثلاً هم کراتین و هم آرایش مو) */}
+                  <div className="space-y-2 pt-1">
+                    <div className="text-[11px] font-extrabold text-[#527371]">
+                      مهارت‌ها و خدمات تخصصی این فرد ({toPersianDigits(specSkills.length)} مهارت):
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {specSkills.map((skillName) => {
+                        const matchedTariff = (spec.tariffs || []).find(
+                          (t) => t.title === skillName || t.title.includes(skillName) || skillName.includes(t.title)
+                        );
+                        return (
+                          <button
+                            key={skillName}
+                            type="button"
+                            onClick={() => {
+                              setActiveProfile(spec);
+                              setSelectedSlot(slots[0] || '');
+                              setSelectedTariffTitle(matchedTariff?.title || spec.tariffs?.[0]?.title || skillName);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#effcfb] hover:bg-[#ddf6f4] text-[#0b5c60] border border-[#bce6e4] text-xs font-extrabold transition-colors cursor-pointer"
+                          >
+                            <Sparkles className="w-3 h-3 text-[#0a8387]" />
+                            <span>{skillName}</span>
+                            {matchedTariff && matchedTariff.price_toman > 0 && (
+                              <span className="text-[10px] font-bold text-[#0a8387] tabular-nums">
+                                ({formatToman(matchedTariff.price_toman)})
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-[#E2EFEF] dark:border-[#26384E]">
@@ -328,14 +419,15 @@ export const BeautySalonView: React.FC<{
                       </div>
                     </div>
                     <button
+                      type="button"
                       onClick={() => {
                         setActiveProfile(spec);
                         setSelectedSlot(slots[0] || '');
                         setSelectedTariffTitle(spec.tariffs?.[0]?.title || '');
                       }}
-                      className="rounded-xl bg-[#065A52] hover:bg-[#054943] text-white px-4 py-2 text-xs font-extrabold cursor-pointer"
+                      className="rounded-xl bg-[#065A52] hover:bg-[#054943] text-white px-4 py-2.5 text-xs font-extrabold cursor-pointer transition-colors"
                     >
-                      مشاهده تعرفه و رزرو
+                      انتخاب مهارت و رزرو نوبت
                     </button>
                   </div>
                 </div>
@@ -343,7 +435,7 @@ export const BeautySalonView: React.FC<{
             })}
             {filteredSpecialists.length === 0 && (
               <div className={`col-span-full rounded-3xl border p-10 text-center text-sm ${cardCls}`}>
-                در این روز یا فیلتر مهارت، متخصصی با نوبت آزاد یافت نشد. روز دیگری از تقویم را انتخاب کنید.
+                در این فیلتر مهارت یا روز، متخصصی یافت نشد. فیلتر «همه مهارت‌ها» را انتخاب کنید.
               </div>
             )}
           </div>

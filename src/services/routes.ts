@@ -6,7 +6,8 @@ export type MainView =
   | 'customer-signup'
   | 'about'
   | 'management'
-  | 'news';
+  | 'news'
+  | 'dashboard';
 
 export type ServiceSubTab = 'catalog' | 'store' | 'tandispay' | 'orders';
 
@@ -24,10 +25,11 @@ export const ROUTE_TITLES: Record<string, string> = {
   '/': 'تندیس | خدمات در محل، تعمیرات، زیبایی و تندیس‌پی',
   '/app': 'دانلود اپلیکیشن تندیس و تندیس همکار | تندیس',
   '/services': 'خدمات در محل تندیس | ۳۲ خدمت تخصصی',
-  '/beauty': 'زیبایی بانوان و نوبت‌دهی آنلاین | تندیس',
-  '/store': 'فروشگاه قطعات اصلی تندیس | تندیس',
-  '/tandispay': 'تندیس‌پی؛ کیف پول و اعتبار اقساطی | تندیس',
+  '/beauty': 'زیبایی و سلامت؛ لیست متخصصان و نوبت‌دهی آنلاین | تندیس',
+  '/store': 'فروشگاه تندیس (به‌زودی) | تندیس',
+  '/tandispay': 'تندیس‌پی (به‌زودی) | تندیس',
   '/orders': 'پیگیری درخواست‌ها و فاکتورها | تندیس',
+  '/dashboard': 'داشبورد مشتری، سفارشات، اقساط و تیکت‌ها | تندیس',
   '/hamkar': 'پنل وب تندیس همکار | سامانه متخصصان تندیس',
   '/hamkar/signup': 'ثبت‌نام متخصص و همکار جدید | تندیس همکار',
   '/signup': 'ثبت‌نام عضویت مشتری | تندیس',
@@ -35,7 +37,7 @@ export const ROUTE_TITLES: Record<string, string> = {
   '/terms': 'قوانین، شرایط استفاده و رویه عودت وجه | تندیس',
   '/privacy': 'حریم خصوصی کاربران | تندیس',
   '/management': 'مدیریت و کارشناسان تندیس | تندیس',
-  '/news': 'اخبار و مقالات تندیس (به‌زودی) | تندیس'
+  '/news': 'مجله آموزشی، اخبار و مقالات تخصصی تندیس | تندیس'
 };
 
 export function parseRouteFromLocation(pathnameRaw: string, hashRaw = ''): ResolvedAppRoute {
@@ -53,6 +55,18 @@ export function parseRouteFromLocation(pathnameRaw: string, hashRaw = ''): Resol
       hamkarMode: isSignup ? 'signup' : 'login',
       canonicalPath: isSignup ? '/hamkar/signup' : '/hamkar',
       pageTitle: isSignup ? ROUTE_TITLES['/hamkar/signup'] : ROUTE_TITLES['/hamkar']
+    };
+  }
+
+  if (cleanPath === '/dashboard' || cleanPath === '/panel' || cleanPath === '/profile') {
+    return {
+      activeView: 'dashboard',
+      serviceSubTab: 'catalog',
+      selectedGroupSlug: 'cat-technical-repairs',
+      showBeautyBooking: false,
+      hamkarMode: 'login',
+      canonicalPath: '/dashboard',
+      pageTitle: ROUTE_TITLES['/dashboard']
     };
   }
 
@@ -96,7 +110,12 @@ export function parseRouteFromLocation(pathnameRaw: string, hashRaw = ''): Resol
     };
   }
 
-  if (cleanPath === '/management' || cleanPath === '/experts') {
+  if (
+    cleanPath === '/management' ||
+    cleanPath === '/experts' ||
+    cleanPath === '/admin' ||
+    cleanPath === '/admin-panel'
+  ) {
     return {
       activeView: 'management',
       serviceSubTab: 'catalog',

@@ -35,13 +35,17 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       onClick: () => onNavClick('services'),
       isActive: isServicesGroup,
     },
-    {
-      id: 'orders',
-      label: 'سفارش‌ها',
-      icon: ReceiptText,
-      onClick: () => onNavClick('orders'),
-      isActive: activeNav === 'orders',
-    },
+    ...(isLoggedIn
+      ? [
+          {
+            id: 'orders',
+            label: 'سفارش‌ها',
+            icon: ReceiptText,
+            onClick: () => onNavClick('orders'),
+            isActive: activeNav === 'orders',
+          },
+        ]
+      : []),
     {
       id: 'downloads',
       label: 'دانلود',
@@ -51,10 +55,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     },
     {
       id: 'account',
-      label: isLoggedIn ? 'حساب من' : 'ورود',
+      label: isLoggedIn ? 'داشبورد' : 'ورود',
       icon: User,
-      onClick: isLoggedIn ? onOpenDrawer : onOpenAuth,
-      isActive: false,
+      onClick: isLoggedIn ? () => onNavClick('dashboard') : onOpenAuth,
+      isActive: activeNav === 'dashboard',
     },
   ];
 
@@ -64,7 +68,11 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       aria-label="منوی پایین موبایل"
       className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-xl border-t border-[#dfecec] shadow-[0_-4px_20px_rgba(11,92,96,0.08)] px-1.5 pb-[env(safe-area-inset-bottom)] no-print"
     >
-      <div className="max-w-md mx-auto h-16 grid grid-cols-5 items-center">
+      <div
+        className={`max-w-md mx-auto h-16 grid items-center ${
+          isLoggedIn ? 'grid-cols-5' : 'grid-cols-4'
+        }`}
+      >
         {items.map((item) => {
           const Icon = item.icon;
 

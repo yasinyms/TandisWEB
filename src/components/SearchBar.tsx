@@ -7,6 +7,7 @@ interface SearchBarProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
   currentCity: string;
+  isLoggedIn?: boolean;
   onSearchSubmit: () => void;
   onOpenCityModal?: () => void;
   selectedCategoryName?: string;
@@ -17,6 +18,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   searchQuery,
   onSearchChange,
   currentCity,
+  isLoggedIn = false,
   onSearchSubmit,
   onOpenCityModal,
 }) => {
@@ -34,19 +36,21 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       className="w-full bg-white p-3 sm:p-4 rounded-2xl shadow-[0_4px_20px_rgba(11,92,96,0.04)] border border-[#e2efef]"
     >
       <div className="flex flex-col lg:flex-row items-center gap-2.5">
-        <div className="w-full lg:w-auto shrink-0">
-          <button
-            type="button"
-            onClick={onOpenCityModal}
-            className="w-full lg:w-40 flex items-center justify-between gap-2 px-3.5 py-3 rounded-xl bg-[#f4fafa] hover:bg-[#e7f4f4] border border-[#dcecec] text-[#12292c] text-xs sm:text-sm font-bold transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-1.5 min-w-0">
-              <MapPin className="w-4 h-4 text-[#0b5c60] shrink-0" />
-              <span className="truncate">{currentCity}</span>
-            </div>
-            <ChevronDown className="w-4 h-4 text-[#5f777b] shrink-0" />
-          </button>
-        </div>
+        {isLoggedIn && (
+          <div className="w-full lg:w-auto shrink-0">
+            <button
+              type="button"
+              onClick={onOpenCityModal}
+              className="w-full lg:w-40 flex items-center justify-between gap-2 px-3.5 py-3 rounded-xl bg-[#f4fafa] hover:bg-[#e7f4f4] border border-[#dcecec] text-[#12292c] text-xs sm:text-sm font-bold transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-1.5 min-w-0">
+                <MapPin className="w-4 h-4 text-[#0b5c60] shrink-0" />
+                <span className="truncate">{currentCity}</span>
+              </div>
+              <ChevronDown className="w-4 h-4 text-[#5f777b] shrink-0" />
+            </button>
+          </div>
+        )}
 
         <div className="flex-1 w-full relative flex items-center">
           <Search className="w-4 h-4 absolute right-3.5 text-[#5f777b] pointer-events-none" />

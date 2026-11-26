@@ -1,15 +1,34 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { ChevronLeft } from 'lucide-react';
+import {
+  Briefcase,
+  Car,
+  ChevronLeft,
+  HeartPulse,
+  Scale,
+  Sparkles,
+  Truck,
+  Wrench,
+} from 'lucide-react';
 import type { ServiceCategoryGroup } from '../types/tandis';
 import { toPersianDigits, toPurePersianText } from '../services/tandisDefaults';
-import { ServiceApiIcon } from './ServiceApiIcon';
 
 interface CategoriesGridProps {
   categories?: ServiceCategoryGroup[];
   selectedCategoryId: string;
   onSelectCategory: (categorySlug: string) => void;
 }
+
+const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  'cat-technical-repairs': Wrench,
+  'cat-automotive-mechanic': Car,
+  'cat-cleaning-moving': Truck,
+  'cat-medical-nursing': HeartPulse,
+  'cat-legal-judicial': Scale,
+  'cat-beauty-personal': Sparkles,
+  'cat-business-tech-industry': Briefcase,
+  'cat-ride-request': Car,
+};
 
 export const CategoriesGrid: React.FC<CategoriesGridProps> = ({
   categories = [],
@@ -44,6 +63,7 @@ export const CategoriesGrid: React.FC<CategoriesGridProps> = ({
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
         {orderedCategories.map((group) => {
           const isSelected = selectedCategoryId === group.slug;
+          const IconComponent = CATEGORY_ICONS[group.slug] || Wrench;
 
           return (
             <motion.button
@@ -59,16 +79,15 @@ export const CategoriesGrid: React.FC<CategoriesGridProps> = ({
               }`}
             >
               <div className="flex items-start justify-between gap-2 w-full">
-                <ServiceApiIcon
-                  iconKey={group.iconKey}
-                  iconUrl={group.iconUrl}
-                  groupSlug={group.slug}
-                  colorHex={group.colorHex || group.accentHex}
-                  iconStyle={group.iconStyle}
-                  inverted={isSelected}
-                  size="md"
-                  alt={toPurePersianText(group.title)}
-                />
+                <div
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors shrink-0 ${
+                    isSelected
+                      ? 'bg-white/20 text-white'
+                      : 'bg-[#effcfb] text-[#0a8387] group-hover:bg-[#0a8387] group-hover:text-white border border-[#d2eceb]'
+                  }`}
+                >
+                  <IconComponent className="w-5 h-5" />
+                </div>
 
                 {group.isComingSoon ? (
                   <span

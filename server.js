@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import { Readable } from 'stream';
 import { fileURLToPath } from 'url';
+import { createAdminRouter } from './adminRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -112,6 +113,7 @@ function isSystemOrNonCustomerRecord(req) {
     id.startsWith('parts_order_') ||
     id.startsWith('blocked_') ||
     id.startsWith('notif_') ||
+    id.startsWith('user_notif_state_') ||
     [
       'SUPPORT_TICKET', 'SPECIALIST_DOCS', 'SYSTEM_CONFIG', 'SYSTEM_SMS_CONFIG', 'SYSTEM_CATEGORIES',
       'SYSTEM_SLIDERS', 'CATEGORY_SLIDERS', 'CUSTOMER_WALLET', 'WALLET',
@@ -119,7 +121,7 @@ function isSystemOrNonCustomerRecord(req) {
       'LOAN', 'TANDIS_PAY', 'TANDIS_PAY_LOAN', 'CUSTOMER_PRESENCE', 'SESSION_LOCK',
       'NAME_OVERRIDE', 'BEAUTY_SCHEDULE', 'BEAUTY_SPECIALIST_PROFILE',
       'BEAUTY_APPOINTMENT', 'PART_INQUIRY', 'PARTS_ORDER',
-      'ADMIN_NOTIFICATION', 'SYSTEM_NOTIFICATION', 'BROADCAST_NOTIFICATION'
+      'ADMIN_NOTIFICATION', 'SYSTEM_NOTIFICATION', 'BROADCAST_NOTIFICATION', 'USER_NOTIF_STATE'
     ].includes(cat) ||
     reqId === 'SYSTEM_SMS_CONFIG' ||
     model === 'SPECIALIST_DOCS' ||
@@ -945,20 +947,153 @@ app.get('/api/tandis/live-state', async (req, res) => {
       }
     }
 
-    // ۷. پروفایل‌های زیبایی و تقویم نوبت‌های زنده
+    // ۷. پروفایل‌های زیبایی، مهارت‌های چندگانه (کراتین، آرایش مو، ناخن، پوست و...) و تقویم نوبت‌های زنده
     const beautyMap = new Map();
+
+    // ابتدا همکاران تاییدشده در دسته «زیبایی و سلامت» را از جدول customers استخراج می‌کنیم
+    for (const c of allCustomers) {
+      if (!String(c.phone || '').toLowerCase().startsWith('hamkar_')) continue;
+      const parsedHamkar = parseHamkarCustomerRecord(c);
+      if (!parsedHamkar || parsedHamkar.approvalStatus !== 'APPROVED') continue;
+      const catCode = String(parsedHamkar.categoryCode || '').toLowerCase();
+      const catGroup = String(parsedHamkar.categoryGroup || '');
+      const roleStr = String(parsedHamkar.roleTitle || '');
+      const isBeautySpecialist =
+        catCode.includes('beauty') ||
+        catGroup.includes('زیبایی') ||
+        /آرایش|کراتین|ناخن|پوست|فیشیال|مو|میکاپ|سالن زیبایی/i.test(`${catGroup} ${roleStr}`);
+      if (!isBeautySpecialist) continue;
+
+      const key = parsedHamkar.phone;
+      if (!key) continue;
+      const initialSkills = [];
+      if (parsedHamkar.roleTitle && parsedHamkar.roleTitle !== 'متخصص تندیس') {
+        initialSkills.push(parsedHamkar.roleTitle);
+      }
+      if (parsedHamkar.skillDescription) {
+        for (const token of parsedHamkar.skillDescription.split(/[،,|/]+/)) {
+          const cleanToken = token.trim();
+          if (cleanToken && cleanToken.length >= 3 && cleanToken.length <= 45) {
+            initialSkills.push(cleanToken);
+          }
+        }
+      }
+      beautyMap.set(key, {
+        specialist_phone: key,
+        specialist_name: parsedHamkar.fullName || 'متخصص زیبایی تندیس',
+        business_name: parsedHamkar.businessName || `سالن زیبایی ${parsedHamkar.fullName}`,
+        category_code: parsedHamkar.categoryCode || 'cat-beauty-personal',
+        role_title: parsedHamkar.roleTitle || 'متخصص زیبایی و سلامت',
+        service_city: parsedHamkar.serviceCity || 'آبادان',
+        city: parsedHamkar.serviceCity || 'آبادان',
+        salon_address: parsedHamkar.serviceAddress || parsedHamkar.serviceCity || 'آبادان',
+        bio: parsedHamkar.skillDescription || 'متخصص رسمی زیبایی و سلامت با مدارک تاییدشده در سامانه تندیس.',
+        rating: 4.9,
+        review_count: 18,
+        avatar_url: parsedHamkar.profilePhoto || avatarByPhone.get(key) || null,
+        skills: Array.from(new Set(initialSkills)),
+        tariffs: []
+      });
+    }
+
+    // سپس اطلاعات کامل پروفایل زیبایی (spec_profile_* و beauty_spec_*) و مهارت‌های چندگانه را ادغام می‌کنیم
     for (const r of sortedReviews) {
       const rid = String(r.id || '');
-      if (rid.startsWith('beauty_spec_') || r.request_id === 'BEAUTY_SPECIALIST_PROFILE') {
+      const titleUpper = String(r.service_title || '').trim().toUpperCase();
+      if (
+        rid.startsWith('beauty_spec_') ||
+        rid.startsWith('spec_profile_') ||
+        r.request_id === 'BEAUTY_SPECIALIST_PROFILE' ||
+        titleUpper === 'BEAUTY_SPECIALIST_PROFILE'
+      ) {
         try {
-          const obj = JSON.parse(r.comment || '{}');
-          const key = normalizePhone(obj.specialist_phone || obj.phone || rid.replace('beauty_spec_', '')) || rid;
+          const rawComment = String(r.comment || '').trim();
+          if (!rawComment.startsWith('{')) continue;
+          const obj = JSON.parse(rawComment);
+          const isBeautyRecord =
+            rid.startsWith('beauty_spec_') ||
+            r.request_id === 'BEAUTY_SPECIALIST_PROFILE' ||
+            titleUpper === 'BEAUTY_SPECIALIST_PROFILE' ||
+            obj.category_slug === 'cat-beauty-personal' ||
+            String(obj.category_code || '').includes('beauty') ||
+            Array.isArray(obj.selected_skills) ||
+            Array.isArray(obj.skills) ||
+            Array.isArray(obj.service_prices) ||
+            Array.isArray(obj.tariffs);
+
+          const key =
+            normalizePhone(
+              obj.specialist_phone ||
+                obj.phone ||
+                r.customer_phone ||
+                rid.replace(/^(beauty_spec_|spec_profile_)/i, '')
+            ) || rid;
+
+          if (!isBeautyRecord && !beautyMap.has(key)) continue;
+
           const prev = beautyMap.get(key) || {};
+          const rawSkills = [
+            ...(Array.isArray(prev.skills) ? prev.skills : []),
+            ...(Array.isArray(obj.skills) ? obj.skills : []),
+            ...(Array.isArray(obj.selected_skills) ? obj.selected_skills : []),
+            ...(Array.isArray(obj.specialties) ? obj.specialties : [])
+          ]
+            .map((s) => (typeof s === 'string' ? s.trim() : String(s?.title || s?.name || '').trim()))
+            .filter(Boolean);
+
+          const rawTariffs = [
+            ...(Array.isArray(obj.tariffs) ? obj.tariffs : []),
+            ...(Array.isArray(obj.service_prices) ? obj.service_prices : []),
+            ...(Array.isArray(prev.tariffs) ? prev.tariffs : [])
+          ]
+            .map((t) => ({
+              title: String(t?.title || t?.skill_title || t?.service_title || t?.name || '').trim(),
+              price_toman: Number(t?.price_toman || t?.amount_toman || t?.price || 650000),
+              duration_min: Number(t?.duration_min || t?.duration || 60)
+            }))
+            .filter((t) => Boolean(t.title));
+
+          // هر مهارتی که در تعرفه‌ها ثبت شده نیز به لیست مهارت‌های متخصص اضافه می‌شود
+          for (const t of rawTariffs) {
+            rawSkills.push(t.title);
+          }
+
+          const uniqueSkills = Array.from(new Set(rawSkills));
+          const uniqueTariffsMap = new Map();
+          for (const t of rawTariffs) {
+            uniqueTariffsMap.set(t.title, t);
+          }
+          for (const sk of uniqueSkills) {
+            if (!uniqueTariffsMap.has(sk)) {
+              uniqueTariffsMap.set(sk, {
+                title: sk,
+                price_toman: 750000,
+                duration_min: 60
+              });
+            }
+          }
+
           beautyMap.set(key, {
             ...prev,
             ...obj,
-            specialist_phone: normalizePhone(obj.specialist_phone || obj.phone || prev.specialist_phone),
-            avatar_url: obj.avatar_url || prev.avatar_url || avatarByPhone.get(key) || null
+            specialist_phone: normalizePhone(obj.specialist_phone || obj.phone || prev.specialist_phone || key),
+            specialist_name:
+              obj.specialist_name || obj.full_name || prev.specialist_name || r.specialist_name || 'متخصص زیبایی تندیس',
+            business_name:
+              obj.business_name ||
+              obj.salon_name ||
+              prev.business_name ||
+              `سالن زیبایی ${obj.specialist_name || prev.specialist_name || 'تندیس'}`,
+            role_title:
+              obj.role_title ||
+              prev.role_title ||
+              (uniqueSkills.length > 0 ? uniqueSkills.slice(0, 2).join(' و ') : 'متخصص زیبایی و سلامت'),
+            service_city: obj.service_city || obj.city || prev.service_city || 'آبادان',
+            city: obj.city || obj.service_city || prev.city || 'آبادان',
+            salon_address: obj.salon_address || obj.address || prev.salon_address || obj.city || 'آبادان',
+            avatar_url: obj.avatar_url || obj.profile_photo || prev.avatar_url || avatarByPhone.get(key) || null,
+            skills: uniqueSkills,
+            tariffs: Array.from(uniqueTariffsMap.values())
           });
         } catch {}
       } else if (rid.startsWith('beauty_slots_') || r.request_id === 'BEAUTY_SCHEDULE') {
@@ -969,7 +1104,7 @@ app.get('/api/tandis/live-state', async (req, res) => {
           beautyMap.set(key, {
             ...prev,
             ...obj,
-            specialist_phone: normalizePhone(obj.specialist_phone || prev.specialist_phone),
+            specialist_phone: normalizePhone(obj.specialist_phone || prev.specialist_phone || key),
             avatar_url: prev.avatar_url || obj.avatar_url || avatarByPhone.get(key) || null
           });
         } catch {}
@@ -998,24 +1133,56 @@ app.get('/api/tandis/live-state', async (req, res) => {
           .reverse()
       : [];
 
-    // ۹. وام‌های تندیس پی و استعلام قطعات مشتری
-    const customerLoans = phone
-      ? sortedReviews
-          .filter(
-            (r) =>
-              (String(r.id || '').startsWith('loan_') || r.request_id === 'TANDIS_PAY_LOAN') &&
-              normalizePhone(r.customer_phone) === phone
-          )
-          .map((r) => {
-            try {
-              return { id: r.id, ...JSON.parse(r.comment || '{}') };
-            } catch {
-              return null;
-            }
-          })
-          .filter(Boolean)
-          .reverse()
-      : [];
+    // ۹. وام‌های تندیس پی و اقساط مشتری (همگام با سرور مرکزی)
+    const customerLoansMap = new Map();
+    if (phone) {
+      for (const r of sortedReviews) {
+        const rid = String(r.id || '');
+        const reqId = String(r.request_id || '').toUpperCase();
+        const titleUpper = String(r.service_title || '').toUpperCase();
+        if (rid.startsWith('loan_') || reqId === 'TANDIS_PAY_LOAN' || titleUpper === 'TANDIS_PAY_LOAN') {
+          try {
+            const obj = JSON.parse(r.comment || '{}');
+            const loanPhone = normalizePhone(obj.customer_phone || obj.phone || r.customer_phone || '');
+            if (loanPhone !== phone) continue;
+            const amount = Number(obj.requested_amount_toman || obj.amount_toman || 0);
+            const months = Number(obj.installment_months || obj.installments_count || obj.months || 12);
+            const interestRate = Number(obj.interest_rate_percent ?? 4);
+            const totalRepayment = Number(
+              obj.total_repayment_toman || Math.round(amount * (1 + interestRate / 100))
+            );
+            const monthlyAmount = Number(
+              obj.monthly_installment_toman || (months > 0 ? Math.round(totalRepayment / months) : 0)
+            );
+            const paidIndices = Array.isArray(obj.paid_installments)
+              ? obj.paid_installments.map(Number).filter((n) => Number.isFinite(n) && n >= 1)
+              : [];
+            const paidCount = Number(obj.paid_installments_count ?? paidIndices.length ?? 0);
+
+            customerLoansMap.set(rid, {
+              id: rid,
+              ...obj,
+              customer_phone: loanPhone,
+              customer_name: String(obj.customer_name || obj.full_name || r.customer_name || 'مشتری تندیس'),
+              requested_amount_toman: amount,
+              installment_months: months,
+              installments_count: months,
+              interest_rate_percent: interestRate,
+              monthly_installment_toman: monthlyAmount,
+              total_repayment_toman: totalRepayment,
+              paid_installments_count: paidCount,
+              paid_installments: paidIndices,
+              national_code: String(obj.national_code || obj.national_id || ''),
+              status: String(obj.status || 'PENDING_REVIEW').toUpperCase(),
+              approved_at_epoch: Number(obj.approved_at_epoch || obj.updated_at_epoch || obj.created_at_epoch || r.created_at_epoch || Date.now()),
+              updated_at_epoch: Number(obj.updated_at_epoch || r.created_at_epoch || Date.now()),
+              created_at_epoch: Number(obj.created_at_epoch || r.created_at_epoch || Date.now())
+            });
+          } catch {}
+        }
+      }
+    }
+    const customerLoans = Array.from(customerLoansMap.values()).reverse();
 
     const partInquiries = phone
       ? sortedReviews
@@ -1072,12 +1239,40 @@ app.get('/api/tandis/live-state', async (req, res) => {
         title: 'اطلاعیه سراسری تندیس',
         message: String(otaConfig.global_announcement_text),
         type: 'ADMIN',
-        createdAtEpoch: Number(otaConfig.updated_at_epoch || Date.now() - 60000),
+        createdAtEpoch: Number(otaConfig.updated_at_epoch || 1700000000000),
         isRead: false,
         senderRole: 'ADMIN'
       });
     }
-    adminNotifications.sort((a, b) => b.createdAtEpoch - a.createdAtEpoch);
+
+    // خواندن وضعیت خوانده‌شده/پاک‌شده اعلان‌های همین کاربر از سرور
+    let notificationState = { readIds: [], clearedIds: [], readAllBeforeEpoch: 0 };
+    if (phone) {
+      const notifStateRev = sortedReviews
+        .filter((r) => String(r.id || '') === `user_notif_state_${phone}` || (String(r.request_id || '').toUpperCase() === 'USER_NOTIF_STATE' && normalizePhone(r.customer_phone) === phone))
+        .pop();
+      if (notifStateRev?.comment) {
+        try {
+          const parsed = JSON.parse(notifStateRev.comment);
+          notificationState = {
+            readIds: Array.isArray(parsed.readIds) ? parsed.readIds.map(String) : [],
+            clearedIds: Array.isArray(parsed.clearedIds) ? parsed.clearedIds.map(String) : [],
+            readAllBeforeEpoch: Number(parsed.readAllBeforeEpoch || 0)
+          };
+        } catch {}
+      }
+    }
+
+    const serverReadSet = new Set(notificationState.readIds);
+    const serverClearedSet = new Set(notificationState.clearedIds);
+    const readBefore = notificationState.readAllBeforeEpoch || 0;
+    const resolvedNotifications = adminNotifications
+      .filter((n) => !serverClearedSet.has(n.id))
+      .map((n) => ({
+        ...n,
+        isRead: Boolean(n.isRead) || serverReadSet.has(n.id) || (readBefore > 0 && Number(n.createdAtEpoch || 0) <= readBefore)
+      }))
+      .sort((a, b) => b.createdAtEpoch - a.createdAtEpoch);
 
     // ۱۱. تیکت‌های پشتیبانی یکپارچه مشتری (support/tickets + tkt_req_* + reviews/ticket_*)
     const mergedCustomerTickets = [];
@@ -1154,10 +1349,30 @@ app.get('/api/tandis/live-state', async (req, res) => {
     }
 
     // ۱۲. فهرست عمومی کارشناسان رسمی تاییدشده برای صفحه «مدیریت و کارشناسان» (بدون افشای شماره تماس خصوصی)
+    const deletedMap = {};
+    for (const r of sortedReviews) {
+      if (String(r.id || '') === 'config_admin_deleted_records' || r.request_id === 'ADMIN_DELETED_RECORDS') {
+        try {
+          const parsed = JSON.parse(r.comment || '{}');
+          const rec = parsed.records || parsed || {};
+          for (const [k, v] of Object.entries(rec)) {
+            const ts = Number(v || 0);
+            if (ts > (deletedMap[k] || 0)) deletedMap[k] = ts;
+          }
+        } catch {}
+      }
+    }
+    const isAdminDeleted = (key, createdAtEpoch = 0) => {
+      const delTs = Number(deletedMap[key] || 0);
+      if (!delTs) return false;
+      if (createdAtEpoch && Number(createdAtEpoch) > delTs) return false;
+      return true;
+    };
+
     const officialSpecialists = allCustomers
       .filter((c) => String(c.phone || '').toLowerCase().startsWith('hamkar_'))
       .map((c) => parseHamkarCustomerRecord(c))
-      .filter((s) => s && s.approvalStatus === 'APPROVED')
+      .filter((s) => s && s.approvalStatus === 'APPROVED' && !isAdminDeleted(`specialist:${s.phone}`))
       .slice(0, 24)
       .map((s) => ({
         fullName: s.fullName,
@@ -1175,20 +1390,87 @@ app.get('/api/tandis/live-state', async (req, res) => {
       categories,
       sliders,
       categorySliders,
-      requests: cleanRequests,
+      requests: cleanRequests.filter((r) => !isAdminDeleted(`order:${r.id}`, r.created_at_epoch)),
       activeCustomer,
       isBlocked,
       walletBalanceToman,
-      beautySpecialists,
-      beautyAppointments,
-      customerLoans,
+      beautySpecialists: beautySpecialists.filter(
+        (b) =>
+          !isAdminDeleted(`specialist:${b.specialist_phone}`) &&
+          !isAdminDeleted(`beauty_profile:beauty_spec_${b.specialist_phone}`) &&
+          !isAdminDeleted(`beauty_profile:${b.id || ''}`)
+      ),
+      beautyAppointments: beautyAppointments.filter((b) => !isAdminDeleted(`beauty_booking:${b.id}`, b.created_at_epoch)),
+      customerLoans: customerLoans.filter((l) => !isAdminDeleted(`loan:${l.id}`, l.created_at_epoch)),
       partInquiries,
-      tickets: mergedCustomerTickets,
-      notifications: adminNotifications,
+      tickets: mergedCustomerTickets.filter((t) => !isAdminDeleted(`ticket:${t.id}`, t.created_at_epoch)),
+      notifications: phone ? resolvedNotifications.filter((n) => !isAdminDeleted(`notification:${n.id}`, n.createdAtEpoch)) : [],
+      notificationState: phone ? notificationState : { readIds: [], clearedIds: [], readAllBeforeEpoch: 0 },
       officialSpecialists
     });
   } catch (err) {
     res.status(500).json({ online: false, error: String(err?.message || err) });
+  }
+});
+
+// ذخیره وضعیت خوانده‌شدن و پاک‌سازی اعلان‌های کاربر روی سرور مرکزی (ماندگار در تمام نشست‌ها)
+app.post('/api/tandis/notifications/state', async (req, res) => {
+  const phone = normalizeStrictIranPhone(req.body?.phone || '');
+  if (!phone) {
+    return res.status(400).json({ ok: false, message: 'شماره موبایل معتبر نیست.' });
+  }
+  const readIds = Array.isArray(req.body?.readIds)
+    ? Array.from(new Set(req.body.readIds.map((x) => String(x || '').trim()).filter(Boolean))).slice(-200)
+    : [];
+  const clearedIds = Array.isArray(req.body?.clearedIds)
+    ? Array.from(new Set(req.body.clearedIds.map((x) => String(x || '').trim()).filter(Boolean))).slice(-200)
+    : [];
+  const readAllBeforeEpoch = Number(req.body?.readAllBeforeEpoch || 0);
+  const now = Date.now();
+  const recordId = `user_notif_state_${phone}`;
+  const payload = {
+    id: recordId,
+    request_id: 'USER_NOTIF_STATE',
+    service_title: 'USER_NOTIF_STATE',
+    specialist_id: 'notif_system',
+    specialist_name: 'سامانه اعلان تندیس',
+    customer_name: 'SYSTEM',
+    customer_phone: phone,
+    stars: 5,
+    quality_tags: 'USER_NOTIF_STATE',
+    comment: JSON.stringify({
+      phone,
+      readIds,
+      clearedIds,
+      readAllBeforeEpoch,
+      updated_at_epoch: now
+    }),
+    created_at_epoch: now,
+    synced_with_django: true
+  };
+
+  try {
+    let saveRes = await fetchDjangoJson(`reviews/${encodeURIComponent(recordId)}/`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        comment: payload.comment,
+        created_at_epoch: now
+      })
+    }).catch(() => ({ ok: false, status: 404 }));
+
+    if (!saveRes.ok) {
+      saveRes = await fetchDjangoJson('reviews/', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      }).catch(() => ({ ok: false, status: 500 }));
+    }
+
+    return res.json({
+      ok: Boolean(saveRes.ok),
+      notificationState: { readIds, clearedIds, readAllBeforeEpoch }
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err?.message || err) });
   }
 });
 
@@ -1553,7 +1835,7 @@ function isHamkarSystemReview(rev) {
     'presence_', 'spec_profile_', 'beauty_slots_', 'beauty_booking_',
     'beauty_apt_', 'beauty_spec_', 'tkt_', 'ticket_', 'support_', 'loan_',
     'part_inquiry_', 'parts_order_', 'blocked_', 'name_override_', 'app_ota_',
-    'slider_', 'catslider_'
+    'slider_', 'catslider_', 'notif_', 'user_notif_state_'
   ];
   if (sysPrefixes.some((p) => id.startsWith(p))) return true;
   const sysReqIds = [
@@ -1561,7 +1843,8 @@ function isHamkarSystemReview(rev) {
     'SPECIALIST_DOCS', 'SESSION_LOCK', 'COMMISSION_SETTLEMENT', 'SYSTEM_WALLET_ADMIN',
     'SPECIALIST_SETTLEMENT', 'BEAUTY_SCHEDULE', 'BEAUTY_BOOKING', 'BEAUTY_APPOINTMENT',
     'BEAUTY_SPECIALIST_PROFILE', 'NAME_OVERRIDE', 'ACCOUNT_BLOCK', 'TANDIS_PAY_LOAN',
-    'PART_INQUIRY', 'PARTS_ORDER', 'SUPPORT_TICKET'
+    'PART_INQUIRY', 'PARTS_ORDER', 'SUPPORT_TICKET',
+    'ADMIN_NOTIFICATION', 'SYSTEM_NOTIFICATION', 'BROADCAST_NOTIFICATION', 'USER_NOTIF_STATE'
   ];
   if (sysReqIds.includes(reqId) || reqId.startsWith('WALLET_')) return true;
   if (
@@ -2589,10 +2872,16 @@ const PAGE_SEO_ROUTES = [
     description: 'معرفی تیم مدیریت، استانداردهای گزینش و کارشناسان رسمی و تاییدشده سامانه خدمات تندیس.',
   },
   {
+    paths: ['/dashboard', '/panel', '/profile'],
+    canonical: '/dashboard',
+    title: 'داشبورد مشتری، سفارشات، اقساط و تیکت‌ها | تندیس',
+    description: 'پنل اختصاصی مشتریان تندیس؛ مشاهده تعداد سفارشات، وضعیت اقساط تندیس‌پی، چاپ فاکتور رسمی و ارسال تیکت پشتیبانی.',
+  },
+  {
     paths: ['/news', '/articles', '/blog'],
     canonical: '/news',
-    title: 'اخبار و مقالات تندیس (به‌زودی) | تندیس',
-    description: 'مجله تخصصی نگهداری لوازم خانگی، خودرو و تازه‌ترین اخبار سامانه خدمات تندیس — به‌زودی.',
+    title: 'مجله آموزشی، اخبار و مقالات تخصصی تندیس | تندیس',
+    description: 'مقالات آموزشی نگهداری لوازم خانگی، سرویس دوره‌ای خودرو، راهنمای خدمات زیبایی و تازه‌ترین اخبار سامانه خدمات تندیس.',
   },
   {
     paths: ['/about', '/contact', '/terms', '/privacy'],
@@ -2638,6 +2927,23 @@ function renderHtmlWithSeo(baseHtml, routeMeta) {
     );
 }
 
+// پنل مدیریت یکپارچه سایت و کارشناسان تندیس (۱۴ ماژول زنده با احراز هویت و کنترل دسترسی نقش‌ها)
+app.use(
+  '/api/admin',
+  (req, res, next) => {
+    res.removeHeader('Access-Control-Allow-Origin');
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+  },
+  createAdminRouter({
+    fetchDjangoJson,
+    normalizePhone,
+    normalizeStrictIranPhone,
+    parseHamkarCustomerRecord,
+    toStandardDigits
+  })
+);
+
 // لیست رسمی لینک صفحات در API برای بررسی یا استفاده خارجی
 app.get('/api/routes', (_req, res) => {
   res.json({
@@ -2666,6 +2972,44 @@ app.get('/sitemap.xml', (req, res) => {
   res
     .type('application/xml; charset=utf-8')
     .send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
+});
+
+// در محیط پیش‌نمایش (که WebSocket غیرفعال است)، کلاینت HMR وایت را با ماژول بی‌اثر جایگزین کن تا خطای WebSocket closed without opened رخ ندهد
+app.get('/@vite/client', (_req, res) => {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(`
+export function createHotContext() {
+  return {
+    accept() {},
+    dispose() {},
+    prune() {},
+    decline() {},
+    invalidate() {},
+    on() {},
+    off() {},
+    send() {},
+    data: {}
+  };
+}
+export function updateStyle(id, content) {
+  if (typeof document === 'undefined') return;
+  let el = document.querySelector('style[data-vite-dev-id="' + id + '"]');
+  if (!el) {
+    el = document.createElement('style');
+    el.setAttribute('type', 'text/css');
+    el.setAttribute('data-vite-dev-id', id);
+    document.head.appendChild(el);
+  }
+  el.textContent = content;
+}
+export function removeStyle(id) {
+  if (typeof document === 'undefined') return;
+  const el = document.querySelector('style[data-vite-dev-id="' + id + '"]');
+  if (el) el.remove();
+}
+export function injectQuery(url) { return url; }
+`);
 });
 
 // سرو فایل‌های ساخته‌شده نسخه تولید وب‌سایت (و پشتیبانی خودکار از Vite در نبود پوشه dist)
@@ -2751,7 +3095,7 @@ self.addEventListener('activate', (event) => {
   } else {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false },
       appType: 'spa'
     });
     app.use(vite.middlewares);

@@ -68,26 +68,24 @@ export const Footer: React.FC<FooterProps> = ({
               >
                 خدمات در محل
               </button>
-              <button
-                type="button"
-                onClick={() => onNavClick('store')}
-                className="text-right hover:text-[#0b5c60] transition-colors cursor-pointer"
+              <span
+                className="text-right text-[#8aa4a8] cursor-not-allowed select-none"
+                aria-disabled="true"
               >
-                فروشگاه قطعات
-              </button>
-              <button
-                type="button"
-                onClick={() => onNavClick('tandispay')}
-                className="text-right hover:text-[#0b5c60] transition-colors cursor-pointer"
+                فروشگاه (به‌زودی)
+              </span>
+              <span
+                className="text-right text-[#8aa4a8] cursor-not-allowed select-none"
+                aria-disabled="true"
               >
-                تندیس‌پی
-              </button>
+                تندیس‌پی (به‌زودی)
+              </span>
               <button
                 type="button"
                 onClick={() => onNavClick('news')}
                 className="text-right hover:text-[#0b5c60] transition-colors cursor-pointer"
               >
-                اخبار و مقالات (به‌زودی)
+                اخبار و مقالات
               </button>
               <button
                 type="button"

@@ -47,6 +47,7 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
+          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
           navigateFallbackDenylist: [/^\/api\//],
           runtimeCaching: [
@@ -108,7 +109,7 @@ export default defineConfig(() => {
     },
     server: {
       port: 3000,
-      hmr: process.env.DISABLE_HMR !== 'true',
+      hmr: false,
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
       proxy: {
         '/api': {

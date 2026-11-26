@@ -14,6 +14,27 @@ export async function fetchLiveState(phone: string): Promise<LiveStatePayload> {
   return resp.json();
 }
 
+export async function saveNotificationState(
+  phone: string,
+  state: { readIds: string[]; clearedIds: string[]; readAllBeforeEpoch: number }
+): Promise<void> {
+  if (!phone || !/^09\d{9}$/.test(phone)) return;
+  try {
+    await fetch('/api/tandis/notifications/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phone,
+        readIds: state.readIds,
+        clearedIds: state.clearedIds,
+        readAllBeforeEpoch: state.readAllBeforeEpoch
+      })
+    });
+  } catch {
+    // ignore transient network errors; localStorage still preserves state locally
+  }
+}
+
 export async function checkAccountStatus(phone: string): Promise<{
   phone: string;
   existsAsCustomer: boolean;

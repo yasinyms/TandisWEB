@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { motion } from 'motion/react';
 import {
   AlertTriangle,
   ArrowRight,
@@ -14,6 +15,8 @@ import {
   X
 } from 'lucide-react';
 import { ALL_IRAN_CITIES, IRAN_PROVINCES } from '../services/iranProvinces';
+
+const CUSTOMER_LOGO_SRC = '/assets/aistudio/WhatsApp_Image_2026-11-15_at_17.37.57_b48837a8.jpeg';
 import {
   registerCustomer,
   sendOtp,
@@ -92,7 +95,7 @@ export const CitySelectorModal: React.FC<{
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-[#091e20]/45 p-0 sm:p-4 backdrop-blur-xs"
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-[#091e20]/45 p-0 sm:p-4 backdrop-blur-xs"
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -405,19 +408,93 @@ export const AuthModal: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-xs">
-      <div className={`w-full max-w-md rounded-3xl border shadow-2xl overflow-hidden ${panelCls}`}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4 backdrop-blur-xs">
+      <motion.div
+        initial={{ opacity: 0, y: 24, scale: 0.94 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ type: 'spring', stiffness: 340, damping: 26 }}
+        className={`w-full max-w-md rounded-3xl border shadow-2xl overflow-hidden ${panelCls}`}
+      >
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#E2EFEF] dark:border-[#26384E]">
-          <div className="flex items-center gap-2 font-black text-lg">
+          <div className="flex items-center gap-2 font-black text-base sm:text-lg">
             <Phone className="w-5 h-5 text-[#065A52] dark:text-[#14B8A6]" />
-            ورود و ثبت‌نام پیامکی تندیس
+            ورود به حساب کاربری تندیس
           </div>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-black/5 cursor-pointer" aria-label="بستن">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
+        {/* لوگو موشن اختصاصی تندیس در پنجره ورود (موبایل و دسکتاپ) */}
+        <div className="pt-6 pb-2 px-6 flex flex-col items-center text-center relative overflow-hidden">
+          <div className="relative flex items-center justify-center w-24 h-24">
+            {/* حلقه موج‌دار بیرونی */}
+            <motion.div
+              animate={{
+                scale: [1, 1.32, 1],
+                opacity: [0.35, 0.06, 0.35]
+              }}
+              transition={{
+                duration: 2.6,
+                repeat: Infinity,
+                ease: 'easeInOut'
+              }}
+              className="absolute inset-0 rounded-3xl bg-gradient-to-tr from-[#0b5c60] to-[#0a8387]"
+            />
+            {/* حلقه چرخشی ملایم میانی */}
+            <motion.div
+              animate={{
+                rotate: [0, 8, -8, 0],
+                scale: [1, 1.07, 1]
+              }}
+              transition={{
+                duration: 3.4,
+                repeat: Infinity,
+                ease: 'easeInOut'
+              }}
+              className="absolute inset-1.5 rounded-2xl border-2 border-[#0a8387]/35 bg-[#effcfb]"
+            />
+            {/* کارت لوگو با حرکت شناور نرم */}
+            <motion.div
+              initial={{ scale: 0.5, rotate: -12, opacity: 0 }}
+              animate={{
+                scale: 1,
+                rotate: 0,
+                opacity: 1,
+                y: [0, -4, 0]
+              }}
+              transition={{
+                scale: { type: 'spring', stiffness: 320, damping: 18 },
+                rotate: { type: 'spring', stiffness: 260, damping: 18 },
+                y: { duration: 2.4, repeat: Infinity, ease: 'easeInOut' }
+              }}
+              className="relative z-10 w-18 h-18 rounded-2xl bg-white p-1.5 shadow-[0_10px_28px_rgba(11,92,96,0.22)] border-2 border-[#0a8387]/30 flex items-center justify-center overflow-hidden"
+            >
+              <img
+                src={CUSTOMER_LOGO_SRC}
+                alt="لوگوی تندیس"
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-contain rounded-xl"
+              />
+            </motion.div>
+          </div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.12 }}
+            className="mt-2.5 space-y-0.5"
+          >
+            <div className="text-base font-black text-[#0b5c60] dark:text-[#14B8A6]">
+              سامانه هوشمند تندیس
+            </div>
+            <p className="text-[11px] text-[#5f777b] dark:text-[#94A3B8]">
+              برای ورود سریع، شماره موبایل خود را وارد کنید
+            </p>
+          </motion.div>
+        </div>
+
+        <div className="p-6 pt-3 space-y-4">
           {errorMsg && (
             <div className="flex items-start gap-2 rounded-2xl bg-red-500/10 border border-red-500/30 p-3 text-xs font-bold text-red-600 dark:text-red-400">
               <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
@@ -534,7 +611,7 @@ export const AuthModal: React.FC<{
             </>
           )}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };
@@ -559,7 +636,7 @@ export const EditNameModal: React.FC<{
     : 'bg-[#F8FAFC] border-[#CBD5E1] text-[#0F2926]';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4">
       <div className={`w-full max-w-md rounded-3xl border p-6 space-y-4 shadow-2xl ${panelCls}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 font-black text-lg">
