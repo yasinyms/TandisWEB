@@ -303,36 +303,37 @@ export const DIGITAL_INDUSTRY_DEMAND_OPTIONS: string[] = [
 export const DEFAULT_CATEGORIES: ServiceCategoryGroup[] = [
   {
     slug: 'cat-ride-request',
-    title: 'درخواست خودرو و پیک',
-    subtitle: 'سرویس سفر شهری، تشریفاتی و پیک فوری',
-    isComingSoon: true,
+    title: 'سرویس دوره‌ای خودرو',
+    subtitle: 'انتخاب خودرو، ثبت کیلومتر، سابقه سرویس و انتخاب قطعات مصرفی',
+    isComingSoon: false,
     subcategories: [
       {
-        id: 'ride-eco',
-        title: 'خودرو اقتصادی تندیس',
-        subtitle: 'سفر ایمن درون‌شهری با تعرفه شفاف',
-        basePriceToman: 120000,
-        etaText: '۸ دقیقه',
-        isComingSoon: true,
-        readyProblems: ['سفر درون‌شهری فوری', 'رفت‌وآمد اداری', 'مسیر رفت و برگشت']
+        id: 'periodic-car-service',
+        title: 'سرویس دوره‌ای کامل خودرو در محل',
+        subtitle: 'تعویض روغن، فیلترها، لنت، تسمه تایم و بازرسی فنی',
+        basePriceToman: 450000,
+        etaText: '۳۰ دقیقه',
+        readyProblems: [
+          'تعویض روغن موتور و فیلترها',
+          'تعویض لنت ترمز جلو و عقب',
+          'تعویض تسمه تایم و تسمه دینام',
+          'تعویض واشر سرسیلندر و واشر سوپاپ',
+          'تعویض شمع موتور و وایرها',
+          'سرویس دوره‌ای کامل دوره‌ای'
+        ]
       },
       {
-        id: 'ride-vip',
-        title: 'خودرو تشریفاتی ویژه',
-        subtitle: 'خودروهای مدل بالا برای تشریفات و فرودگاه',
-        basePriceToman: 350000,
-        etaText: '۱۲ دقیقه',
-        isComingSoon: true,
-        readyProblems: ['ترانسفر فرودگاهی', 'مراسم و تشریفات رسمی', 'در اختیار ساعتی']
-      },
-      {
-        id: 'ride-bike-courier',
-        title: 'پیک موتوری فوری',
-        subtitle: 'ارسال سریع بسته، مدارک و مرسولات شهری',
-        basePriceToman: 95000,
-        etaText: '۱۰ دقیقه',
-        isComingSoon: true,
-        readyProblems: ['ارسال فوری بسته', 'تحویل مدارک اداری', 'ارسال چندمقصدی']
+        id: 'periodic-consumables',
+        title: 'تأمین و تعویض لوازم مصرفی خودرو',
+        subtitle: 'باتری، ضد یخ، روغن ترمز، فیلتر کابین و جلوبندی',
+        basePriceToman: 380000,
+        etaText: '۲۵ دقیقه',
+        readyProblems: [
+          'تعویض باتری و تست دینام',
+          'تعویض روغن ترمز و هیدرولیک',
+          'سرویس جلوبندی و کمک‌فنر',
+          'شارژ گاز کولر و تعویض فیلتر کابین'
+        ]
       }
     ]
   },

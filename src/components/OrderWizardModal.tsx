@@ -81,11 +81,37 @@ export const OrderWizardModal: React.FC<OrderWizardProps> = ({
   // ۱. فنی و تعمیرات لوازم خانگی: انتخاب مارک دستگاه
   const [applianceBrand, setApplianceBrand] = useState('');
 
-  // ۲. امداد و تعمیرات خودرو: برند خودرو، مدل خودرو، سال ساخت، پلاک
+  // ۲. امداد و تعمیرات خودرو و سرویس دوره‌ای: برند خودرو، مدل خودرو، سال ساخت، پلاک، کیلومتر و چک‌باکس مصرفی‌ها
   const [carBrand, setCarBrand] = useState('');
   const [carModelName, setCarModelName] = useState('');
   const [carYear, setCarYear] = useState('۱۴۰۲ (۲۰۲۳)');
   const [carPlate, setCarPlate] = useState('');
+  const [carMileage, setCarMileage] = useState('۴۵,۰۰۰ کیلومتر');
+  const [lastServiceDate, setLastServiceDate] = useState('۳ ماه پیش');
+  const [lastServiceDescription, setLastServiceDescription] = useState('تعویض روغن موتور و فیلترها');
+  const [selectedPeriodicServices, setSelectedPeriodicServices] = useState<string[]>([
+    'تعویض روغن موتور و فیلتر روغن/هوا',
+    'تعویض لنت ترمز جلو و عقب'
+  ]);
+
+  const PERIODIC_CAR_CHECKLIST = [
+    'تعویض روغن موتور و فیلتر روغن',
+    'تعویض فیلتر هوا، فیلتر کابین و فیلتر بنزین (صافی بنزین)',
+    'تعویض لنت ترمز جلو و لنت ترمز عقب',
+    'تعویض واشر سرسیلندر، واشر درب سوپاپ و واشر منیفولد',
+    'تعویض تسمه تایم، تسمه دینام و تسمه کولر (همراه با بلبرینگ تایم)',
+    'تعویض شمع موتور، وایر شمع و کوئل احتراق',
+    'تعویض روغن گیربکس (اتوماتیک / دستی) و واسکازین',
+    'تعویض روغن ترمز، روغن هیدرولیک فرمان و هواگیری ترمز',
+    'تعویض ضدیخ، آب رادیاتور، ترموستات و شستشوی مدار خنک‌کننده',
+    'تست و تعویض باتری خودرو، دینام و استارت',
+    'تعویض دیسک و صفحه کلاچ، سیم کلاچ و بلبرینگ کلاچ',
+    'سرویس جلوبندی، طبق، سیبک، موج‌گیر، بوش و کمک‌فنرها',
+    'تعویض کاسه‌نمدها (پلوس، میل‌لنگ، سوپاپ) و رفع نشتی روغن',
+    'شستشوی سوزن انژکتور، دریچه گاز و استپر موتور',
+    'تعویض تیغه برف‌پاک‌کن، پمپ آب‌پاش و لامپ‌های خودرو',
+    'شارژ گاز کولر، نشت‌یابی و سرویس کمپرسور تهویه'
+  ];
 
   // ۳. نظافت منزل: خانه ویلایی یا آپارتمانی
   const [houseType, setHouseType] = useState<'آپارتمانی' | 'خانه ویلایی'>('آپارتمانی');
@@ -135,7 +161,9 @@ export const OrderWizardModal: React.FC<OrderWizardProps> = ({
     [subId]
   );
 
-  const isAutoService = groupSlug === 'cat-automotive-mechanic' || subId.startsWith('auto-');
+  const isPeriodicCarCategory = groupSlug === 'cat-ride-request' || subId.startsWith('periodic-');
+  const isAutoService =
+    isPeriodicCarCategory || groupSlug === 'cat-automotive-mechanic' || subId.startsWith('auto-');
   const carBrandsList = useMemo(() => Object.keys(CAR_BRANDS_MODELS_CATALOG), []);
   const availableCarModels = useMemo(
     () => (carBrand ? CAR_BRANDS_MODELS_CATALOG[carBrand] || [] : []),
@@ -265,12 +293,18 @@ export const OrderWizardModal: React.FC<OrderWizardProps> = ({
       modelSummary = `برند دستگاه: ${applianceBrand || 'نامشخص'}`;
       detailsLines.push(`مارک / برند دستگاه: ${applianceBrand || 'ثبت‌نشده'}`);
     } else if (isAutoService) {
-      modelSummary = `${carBrand} - ${carModelName} | سال ${carYear}`;
+      modelSummary = `${carBrand} - ${carModelName} | سال ${carYear} (${carMileage})`;
       detailsLines.push(`برند خودرو: ${carBrand}`);
       detailsLines.push(`مدل خودرو: ${carModelName}`);
       detailsLines.push(`سال ساخت: ${carYear}`);
       if (carPlate.trim()) {
         detailsLines.push(`پلاک خودرو: ${carPlate.trim()}`);
+      }
+      detailsLines.push(`کیلومتر فعلی ماشین: ${carMileage}`);
+      detailsLines.push(`آخرین سرویس (تاریخ): ${lastServiceDate}`);
+      detailsLines.push(`آخرین سرویس (اقلام انجام شده): ${lastServiceDescription}`);
+      if (selectedPeriodicServices.length > 0) {
+        detailsLines.push(`سرویس‌ها و قطعات مصرفی درخواستی (چک‌باکس): ${selectedPeriodicServices.join('، ')}`);
       }
     } else if (isHouseCleaning) {
       if (houseType === 'خانه ویلایی') {
@@ -502,17 +536,17 @@ export const OrderWizardModal: React.FC<OrderWizardProps> = ({
                 </div>
               )}
 
-              {/* ۲. بخش اختصاصی امداد و تعمیرات خودرو (برند خودرو -> مدل خودرو -> سال ساخت) */}
+              {/* ۲. بخش اختصاصی سرویس دوره‌ای و تعمیرات خودرو */}
               {isAutoService && (
-                <div className="p-4 rounded-2xl border border-[#dcecec] bg-[#f8fcfc] dark:bg-[#1E2D40]/50 dark:border-[#26384E] space-y-3">
+                <div className="p-4 rounded-2xl border border-[#dcecec] bg-[#f8fcfc] dark:bg-[#1E2D40]/50 dark:border-[#26384E] space-y-4">
                   <div className="flex items-center gap-1.5 text-xs font-black text-[#0b5c60] dark:text-[#2dd4bf]">
                     <Car className="w-4 h-4" />
-                    مشخصات خودرو (برند، مدل و سال ساخت)
+                    مشخصات خودرو و سرویس دوره‌ای
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-[11px] font-bold mb-1 opacity-80">۱. انتخاب برند خودرو:</label>
+                      <label className="block text-[11px] font-bold mb-1 opacity-80">۱. برند خودرو:</label>
                       <div className="relative">
                         <select
                           value={carBrand}
@@ -522,12 +556,10 @@ export const OrderWizardModal: React.FC<OrderWizardProps> = ({
                             const nextModels = CAR_BRANDS_MODELS_CATALOG[nextBrand] || [];
                             setCarModelName(nextModels[0] || '');
                           }}
-                          className={`w-full appearance-none rounded-xl border px-3.5 py-2.5 text-xs font-bold outline-none cursor-pointer ${inputCls}`}
+                          className={`w-full appearance-none rounded-xl border px-3 py-2 text-xs font-bold outline-none cursor-pointer ${inputCls}`}
                         >
                           {carBrandsList.map((b) => (
-                            <option key={b} value={b}>
-                              {b}
-                            </option>
+                            <option key={b} value={b}>{b}</option>
                           ))}
                         </select>
                         <ChevronDown className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
@@ -535,17 +567,31 @@ export const OrderWizardModal: React.FC<OrderWizardProps> = ({
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-bold mb-1 opacity-80">۲. انتخاب نام و مدل خودرو:</label>
+                      <label className="block text-[11px] font-bold mb-1 opacity-80">۲. نام و مدل خودرو:</label>
                       <div className="relative">
                         <select
                           value={carModelName}
                           onChange={(e) => setCarModelName(e.target.value)}
-                          className={`w-full appearance-none rounded-xl border px-3.5 py-2.5 text-xs font-bold outline-none cursor-pointer ${inputCls}`}
+                          className={`w-full appearance-none rounded-xl border px-3 py-2 text-xs font-bold outline-none cursor-pointer ${inputCls}`}
                         >
                           {availableCarModels.map((m) => (
-                            <option key={m} value={m}>
-                              {m}
-                            </option>
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold mb-1 opacity-80">۳. سال ساخت:</label>
+                      <div className="relative">
+                        <select
+                          value={carYear}
+                          onChange={(e) => setCarYear(e.target.value)}
+                          className={`w-full appearance-none rounded-xl border px-3 py-2 text-xs font-bold outline-none cursor-pointer ${inputCls}`}
+                        >
+                          {CAR_PRODUCTION_YEARS.map((yr) => (
+                            <option key={yr} value={yr}>سال {yr}</option>
                           ))}
                         </select>
                         <ChevronDown className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
@@ -553,34 +599,96 @@ export const OrderWizardModal: React.FC<OrderWizardProps> = ({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-[11px] font-bold mb-1 opacity-80">۳. سال ساخت / تاریخ تولید خودرو:</label>
-                      <div className="relative">
-                        <select
-                          value={carYear}
-                          onChange={(e) => setCarYear(e.target.value)}
-                          className={`w-full appearance-none rounded-xl border px-3.5 py-2.5 text-xs font-bold outline-none cursor-pointer ${inputCls}`}
-                        >
-                          {CAR_PRODUCTION_YEARS.map((yr) => (
-                            <option key={yr} value={yr}>
-                              سال {yr}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-bold mb-1 opacity-80">شماره پلاک خودرو (اختیاری):</label>
+                      <label className="block text-[11px] font-bold mb-1 opacity-80">۴. کیلومتر فعلی ماشین (کارکرد):</label>
                       <input
-                        value={carPlate}
-                        onChange={(e) => setCarPlate(e.target.value)}
-                        placeholder="مثال: ۱۴ ب ۳۶۵ ایران ۲۴"
-                        className={`w-full rounded-xl border px-3.5 py-2.5 text-xs font-bold outline-none ${inputCls}`}
+                        value={carMileage}
+                        onChange={(e) => setCarMileage(e.target.value)}
+                        placeholder="مثال: ۴۵,۰۰۰ کیلومتر"
+                        className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputCls}`}
                       />
                     </div>
+                    <div>
+                      <label className="block text-[11px] font-bold mb-1 opacity-80">۵. آخرین سرویس (چه زمانی؟):</label>
+                      <input
+                        value={lastServiceDate}
+                        onChange={(e) => setLastServiceDate(e.target.value)}
+                        placeholder="مثال: ۳ ماه پیش / ۱۴۰۴/۰۸"
+                        className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputCls}`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold mb-1 opacity-80">۶. آخرین سرویس (چه کاری انجام شد؟):</label>
+                      <input
+                        value={lastServiceDescription}
+                        onChange={(e) => setLastServiceDescription(e.target.value)}
+                        placeholder="مثال: تعویض روغن و فیلتر هوا"
+                        className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputCls}`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-1 border-t border-[#dcecec] dark:border-[#26384E]">
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="block text-xs font-black text-[#0b5c60] dark:text-[#2dd4bf]">
+                        ۷. انتخاب سرویس‌ها و قطعات مصرفی مورد نیاز (چک‌باکس چندانتخابی):
+                      </label>
+                      <span className="text-[11px] font-black text-[#0E4D3B] dark:text-[#2dd4bf]">
+                        {toPersianDigits(selectedPeriodicServices.length)} قطعه/سرویس انتخاب‌شده
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                      {PERIODIC_CAR_CHECKLIST.map((item) => {
+                        const isChecked = selectedPeriodicServices.includes(item);
+                        return (
+                          <div
+                            key={item}
+                            onClick={() => {
+                              setSelectedPeriodicServices((prev) =>
+                                prev.includes(item) ? prev.filter((i) => i !== item) : [...prev, item]
+                              );
+                            }}
+                            className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs font-bold cursor-pointer transition-colors select-none ${
+                              isChecked
+                                ? 'bg-[#0E4D3B]/10 border-[#0E4D3B] text-[#0E4D3B] dark:bg-[#2dd4bf]/20 dark:text-[#2dd4bf]'
+                                : 'bg-white border-[#dcecec] text-[#334155] dark:bg-[#1E2D40] dark:border-[#334155] dark:text-white/90'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              readOnly
+                              className="w-4 h-4 accent-[#0E4D3B] rounded pointer-events-none"
+                            />
+                            <span>{item}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* پرامپت یکپارچه همگام‌سازی زنده بین تندیس مشتری، تندیس همکار و تندیس مدیریت */}
+                  <div className="rounded-xl border border-[#0E4D3B]/30 bg-[#0E4D3B]/5 dark:bg-[#0E4D3B]/20 p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-black text-[#0E4D3B] dark:text-[#2dd4bf]">
+                        پرامپت آماده ارسال به تندیس مشتری، تندیس همکار (تایید متخصص) و تندیس مدیریت (بررسی و نظارت):
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const { fullIssueDescription } = buildStructuredOrderSummary();
+                          navigator.clipboard?.writeText(fullIssueDescription);
+                          onToast('پرامپت مشخصات سرویس دوره‌ای خودرو کپی شد.');
+                        }}
+                        className="rounded-lg bg-[#0E4D3B] text-white px-2.5 py-1 text-[10px] font-black cursor-pointer hover:bg-[#146C53]"
+                      >
+                        کپی پرامپت
+                      </button>
+                    </div>
+                    <p className="text-[11px] leading-5 font-bold text-[#12292c] dark:text-white/90 bg-white/80 dark:bg-black/25 rounded-lg p-2.5 border border-[#dcecec] dark:border-[#26384E]">
+                      {`[سرویس دوره‌ای خودرو تندیس] خودرو: ${carBrand} - ${carModelName} | سال ساخت: ${carYear} | کارکرد فعلی: ${carMileage} | آخرین سرویس: ${lastServiceDate} (${lastServiceDescription}) | اقلام مصرفی و سرویس‌های درخواستی: ${selectedPeriodicServices.join('، ') || 'ثبت‌نشده'} | وضعیت: ثبت در تندیس مشتری -> ارسال جهت تایید و صدور فاکتور در تندیس همکار -> ارسال جهت بررسی و تایید نهایی در پنل مدیریت تندیس`}
+                    </p>
                   </div>
                 </div>
               )}

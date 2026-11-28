@@ -18,9 +18,9 @@ export const SeoHead: React.FC<SeoHeadProps> = ({
   schemaData,
 }) => {
   useEffect(() => {
-    const defaultTitle = 'تندیس | خدمات در محل، تعمیرات، زیبایی و سلامت (tandiis.com)';
+    const defaultTitle = 'سوپراپلیکیشن تندیس | خدمات در محل، تعمیرات و امداد خودرو (tandiis.com)';
     const defaultDesc =
-      'تندیس (tandiis.com)؛ سامانه هوشمند سفارش آنلاین خدمات در محل، تعمیرات تخصصی لوازم خانگی، تاسیسات، امداد خودرو، زیبایی و سلامت با ضمانت رسمی در سراسر ایران.';
+      'سوپراپلیکیشن تندیس (tandiis.com)؛ سامانه هوشمند سفارش آنلاین خدمات در محل، تعمیرات تخصصی لوازم خانگی، تاسیسات، امداد خودرو با ضمانت رسمی در سراسر ایران.';
     const defaultCanonical = 'https://tandiis.com/';
     const defaultImage = 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=1200&q=80';
 

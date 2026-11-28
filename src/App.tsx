@@ -565,6 +565,18 @@ export default function App() {
         });
       }
 
+      if (defGroup.slug === 'cat-ride-request') {
+        return {
+          ...defGroup,
+          isComingSoon: false,
+          colorHex: groupColorHex || defGroup.accentHex,
+          accentHex: groupColorHex || defGroup.accentHex,
+          iconKey: groupIconKey || defGroup.iconKey,
+          iconUrl: groupIconUrl || defGroup.iconUrl,
+          iconStyle: groupIconStyle || defGroup.iconStyle,
+        };
+      }
+
       return {
         ...defGroup,
         title: toPurePersianText(String(remoteGroup.title || remoteGroup.name || defGroup.title)) || defGroup.title,
@@ -933,8 +945,8 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     const targetSlug = HOME_CATEGORY_TO_SERVICE_SLUG[catSlugOrId] || catSlugOrId || 'all';
     const matchedGroup = categories.find((g) => g.slug === targetSlug);
-    if (catSlugOrId === 'auto-request' || matchedGroup?.isComingSoon) {
-      showToast(`سرویس «${matchedGroup?.title || 'درخواست خودرو و پیک'}» به‌زودی در شهر شما فعال می‌شود.`);
+    if (matchedGroup?.isComingSoon && targetSlug !== 'cat-ride-request') {
+      showToast(`سرویس «${matchedGroup.title}» به‌زودی در شهر شما فعال می‌شود.`);
       return;
     }
     setSelectedGroupSlug(targetSlug);
@@ -942,6 +954,9 @@ export default function App() {
     setServiceSearchQuery('');
     setActiveView('services');
     setServiceSubTab('catalog');
+    if (targetSlug === 'cat-ride-request' && matchedGroup && matchedGroup.subcategories.length > 0) {
+      setWizardTarget({ group: matchedGroup, sub: matchedGroup.subcategories[0] });
+    }
     if (targetSlug === 'cat-beauty-personal') {
       pushBrowserPath('/beauty', ROUTE_TITLES['/beauty']);
     } else if (targetSlug && targetSlug !== 'all') {
@@ -1925,12 +1940,15 @@ export default function App() {
                             selectedCategoryId={selectedGroupSlug}
                             onSelectCategory={(slug) => {
                               const picked = categories.find((g) => g.slug === slug);
-                              if (picked?.isComingSoon) {
+                              if (picked?.isComingSoon && slug !== 'cat-ride-request') {
                                 showToast(`سرویس «${picked.title}» به‌زودی در شهر شما فعال می‌شود.`);
                                 return;
                               }
                               setSelectedGroupSlug(slug);
                               setShowBeautyBookingInsideCategory(slug === 'cat-beauty-personal');
+                              if (slug === 'cat-ride-request' && picked && picked.subcategories.length > 0) {
+                                setWizardTarget({ group: picked, sub: picked.subcategories[0] });
+                              }
                               pushBrowserPath(
                                 slug === 'cat-beauty-personal' ? '/beauty' : `/services/${slug}`,
                                 slug === 'cat-beauty-personal' ? ROUTE_TITLES['/beauty'] : ROUTE_TITLES['/services']
